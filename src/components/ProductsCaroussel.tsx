@@ -35,7 +35,7 @@ export function ProductCarousel({ images }: ProductCarouselProps) {
           {images.map((src, idx) => (
             <div
               key={idx}
-              className="relative flex-[0_0_100%] md:flex-[0_0_50%] lg:flex-[0_0_33.333%] h-[80vh] border-l border-white"            >
+              className="relative flex-[0_0_100%] md:flex-[0_0_50%] lg:flex-[0_0_33.333%] h-[90vh] border-l border-white"            >
               <Image
                 src={src}
                 alt={`Product image ${idx + 1}`}

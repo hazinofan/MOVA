@@ -35,14 +35,12 @@ export function ProductCarousel({ images }: ProductCarouselProps) {
           {images.map((src, idx) => (
             <div
               key={idx}
-              className="relative flex-[0_0_100%] md:flex-[0_0_50%] lg:flex-[0_0_33.333%] h-[80vh] border-l border-white"            >
-              <Image
+              className="relative flex-[0_0_100%] md:flex-[0_0_50%] lg:flex-[0_0_33.333%] h-[90vh] border-l border-white"            >
+              <img
                 src={src}
                 alt={`Product image ${idx + 1}`}
-                fill
-                priority={idx === 0}
-                sizes="(min-width: 1024px) 33vw, (min-width: 768px) 50vw, 100vw"
-                className="object-cover"
+                loading={idx === 0 ? "eager" : "lazy"}
+                className="absolute inset-0 w-full h-full object-cover"
               />
             </div>
           ))}

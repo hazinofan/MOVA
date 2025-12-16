@@ -1,5 +1,9 @@
+"use client";
+
 import { FiFilter, FiEdit2 } from "react-icons/fi";
 import Image from "next/image";
+import { useEffect, useMemo, useState } from "react";
+import { useRouter } from "next/router";
 
 import { Button } from "@/components/ui/button";
 import {
@@ -14,12 +18,15 @@ import {
 } from "@/components/ui/dialog";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
-import { Textarea } from "@/components/ui/textarea"; // if you have one
+import { Textarea } from "@/components/ui/textarea";
+
 import { ProductCarousel } from "@/components/ProductsCaroussel";
-import { useState } from "react";
 import { PartsBanner } from "@/components/PartsBanner";
 import StickyAddToCartBar from "@/components/StickyBar";
 
+import { fetchProductBySlug, fetchProducts } from "@/core/services/products.service"; // ✅ adjust path
+import { useCartStore } from "@/core/stores/cart.store";
+import { createProductReview, fetchProductReviews, fetchProductReviewStats } from "@/core/services/reviews.service";
 
 type Review = {
   id: number;
@@ -27,86 +34,185 @@ type Review = {
   body: string;
   name: string;
   email: string;
+  rating: number;
 };
 
-const INITIAL_REVIEWS: Review[] = [
-  {
-    id: 1,
-    title: "Best sweatpants I own",
-    body: "Super soft, slightly oversized, exactly what I wanted.",
-    name: "Sarah M.",
-    email: "hidden@example.com",
-  },
-];
+type ReviewStats = {
+  totalReviews: number;
+  averageRating: number;
+  ratingCounts: Record<number, number>;
+  recommendPercent: number;
+};
 
-function ProductDetails() {
-  const images = [
-    "/assets/image1.png",
-    "/assets/image2.png",
-    "/assets/image3.png",
-    "/assets/image4.png",
-    "/assets/image5.png",
-    "/assets/image6.png",
-  ];
+const DEFAULT_STATS: ReviewStats = {
+  totalReviews: 0,
+  averageRating: 0,
+  ratingCounts: { 1: 0, 2: 0, 3: 0, 4: 0, 5: 0 },
+  recommendPercent: 0,
+};
 
-  const featuredProducts = [
-    {
-      id: 1,
-      name: "LOW SHOW V BRALETTE",
-      price: "350",
-      image: "/assets/image1.png",
-      href: "/shop/low-show-v-bralette",
-    },
-    {
-      id: 2,
-      name: "HIGH SCULPT BRA RIB",
-      price: "400",
-      image: "/assets/image3.png",
-      href: "/shop/high-sculpt-bra-rib",
-    },
-    {
-      id: 3,
-      name: "LOW HIDE THONG",
-      price: "150",
-      image: "/assets/image4.png",
-      href: "/shop/low-hide-thong",
-    },
-    {
-      id: 4,
-      name: "SOFT RIB BRALETTE",
-      price: "300",
-      image: "/assets/image6.png",
-      href: "/shop/soft-rib-bralette",
-    },
-    {
-      id: 5,
-      name: "LOW SHOW V BRALETTE – ROSE",
-      price: "350",
-      image: "/assets/image5.png",
-      href: "/shop/low-show-v-rose",
-    },
-  ];
-
-
-  const [reviews, setReviews] = useState<Review[]>(INITIAL_REVIEWS);
-  const [activeTab, setActiveTab] = useState<"reviews" | "questions">(
-    "reviews"
+function firstImageFromProduct(p: any): string | undefined {
+  return (
+    p?.image ||
+    p?.mainImage ||
+    p?.thumbnail ||
+    (Array.isArray(p?.images) ? p.images?.[0]?.url : undefined) ||
+    (Array.isArray(p?.photos) ? p.photos?.[0] : undefined)
   );
+}
+
+const API_URL = process.env.NEXT_PUBLIC_API_URL || "";
+
+function toAbsoluteUrl(url?: string) {
+  if (!url) return undefined;
+  if (url.startsWith("http")) return url;
+  return `${API_URL}${url}`; 
+}
+
+function allImagesFromProduct(p: any): string[] {
+  const fromImages = Array.isArray(p?.images)
+    ? p.images.map((x: any) => toAbsoluteUrl(x?.url)).filter(Boolean)
+    : [];
+
+  const fromPhotos = Array.isArray(p?.photos)
+    ? p.photos.map((x: any) => toAbsoluteUrl(x)).filter(Boolean)
+    : [];
+
+  const first = toAbsoluteUrl(firstImageFromProduct(p));
+  const merged = [first, ...fromImages, ...fromPhotos].filter(Boolean);
+
+  return Array.from(new Set(merged as string[]));
+}
 
 
-  // 👉 later, replace these with values from your product API
-  const ratingCounts: Record<number, number> = { 5: 26, 4: 0, 3: 0, 2: 0, 1: 0 };
-  const totalReviews = Object.values(ratingCounts).reduce(
-    (sum, v) => sum + v,
-    0
-  );
-  const averageRating = 5.0;
-  const recommendPercent = 100;
+export default function ProductDetails() {
+  const router = useRouter();
+  const slug = typeof router.query.slug === "string" ? router.query.slug : undefined;
 
+  const [product, setProduct] = useState<any | null>(null);
+  const [loading, setLoading] = useState(true);
+  const [error, setError] = useState<string | null>(null);
+
+  // Optional: featured strip from API (instead of mock)
+  const [featuredProducts, setFeaturedProducts] = useState<any[]>([]);
+
+  const [reviews, setReviews] = useState<Review[]>([]);
+  const [reviewsLoading, setReviewsLoading] = useState(false);
+  const [selectedSize, setSelectedSize] = useState<string>("M");
+  const [activeTab, setActiveTab] = useState<"reviews" | "questions">("reviews");
+
+  const addItem = useCartStore((s) => s.addItem);
+  const openCart = useCartStore((s) => s.open);
+
+  useEffect(() => {
+    if (!slug) return;
+
+    let cancelled = false;
+
+    async function load() {
+      try {
+        setLoading(true);
+        setError(null);
+
+        const p = await fetchProductBySlug(slug as string);
+        if (!cancelled) setProduct(p);
+      } catch (e: any) {
+        if (!cancelled) setError(e?.message || "Failed to load product");
+      } finally {
+        if (!cancelled) setLoading(false);
+      }
+    }
+
+    load();
+    return () => {
+      cancelled = true;
+    };
+  }, [slug]);
+
+  // Optional featured products from API
+  useEffect(() => {
+    let cancelled = false;
+
+    async function loadFeatured() {
+      try {
+        const data = await fetchProducts(1, 10, false);
+        if (cancelled) return;
+
+        const mapped = (data.items || []).map((p: any) => ({
+          id: p.id,
+          name: p.name,
+          price: p.price,
+          image: toAbsoluteUrl(firstImageFromProduct(p)) || "/assets/image1.png",
+          href: `/shop/${p.slug ?? p.id}`,
+        }));
+
+        setFeaturedProducts(mapped);
+      } catch {
+        // keep empty silently
+      }
+    }
+
+    loadFeatured();
+    return () => {
+      cancelled = true;
+    };
+  }, []);
+
+  const images = useMemo(() => {
+    const imgs = allImagesFromProduct(product);
+    return imgs.length ? imgs : ["/assets/image1.png"];
+  }, [product]);
+
+
+  const [stats, setStats] = useState<ReviewStats>(DEFAULT_STATS);
+  useEffect(() => {
+    if (!product?.id) return;
+
+    let cancelled = false;
+
+    (async () => {
+      try {
+        const s = await fetchProductReviewStats(product.id);
+        if (!cancelled) setStats(s);
+      } catch {
+        // keep defaults silently
+        if (!cancelled) setStats(DEFAULT_STATS);
+      }
+    })();
+
+    return () => {
+      cancelled = true;
+    };
+  }, [product?.id]);
   const starRows = [5, 4, 3, 2, 1];
 
-  const handleSubmitReview = (e: React.FormEvent<HTMLFormElement>) => {
+  useEffect(() => {
+    if (!product?.id) return;
+
+    let cancelled = false;
+
+    (async () => {
+      try {
+        setReviewsLoading(true);
+        const list = await fetchProductReviews(product.id);
+        if (!cancelled) setReviews(list as Review[]);
+      } catch {
+        if (!cancelled) setReviews([]);
+      } finally {
+        if (!cancelled) setReviewsLoading(false);
+      }
+    })();
+
+    return () => {
+      cancelled = true;
+    };
+  }, [product?.id]);
+
+
+  const handleSubmitReview = async (e: React.FormEvent<HTMLFormElement>) => {
     e.preventDefault();
+    if (!product?.id) return;
+
     const formData = new FormData(e.currentTarget);
 
     const title = String(formData.get("title") || "").trim();
@@ -114,23 +220,57 @@ function ProductDetails() {
     const name = String(formData.get("name") || "").trim();
     const email = String(formData.get("email") || "").trim();
 
-    if (!title || !body || !name) {
-      // you can show a toast instead
-      return;
+    if (!title || !body || !name) return;
+
+    try {
+      // ✅ send to DB (you must include rating + recommend to match your backend DTO)
+      const created = await createProductReview(product.id, {
+        title,
+        body,
+        name,
+        email: email || undefined,
+        rating: 5,        // TODO: replace with real user input
+        recommend: true,  // TODO: replace with real user input
+      });
+
+      // ✅ update UI instantly
+      setReviews((prev) => [created as any, ...prev]);
+
+      // ✅ refresh stats so summary updates
+      const s = await fetchProductReviewStats(product.id);
+      setStats(s);
+
+      e.currentTarget.reset();
+    } catch (err: any) {
+      console.log(err);
+      // you can toast(err.message)
     }
-
-    const newReview: Review = {
-      id: reviews.length + 1,
-      title,
-      body,
-      name,
-      email,
-    };
-
-    setReviews((prev) => [newReview, ...prev]);
-    e.currentTarget.reset();
   };
 
+  const ratingCounts = stats.ratingCounts;
+  const totalReviews = stats.totalReviews;
+  const averageRating = stats.averageRating;
+  const recommendPercent = stats.recommendPercent;
+
+
+  if (loading) {
+    return (
+      <div className="py-24 text-center font-druk tracking-[0.16em]">
+        LOADING PRODUCT...
+      </div>
+    );
+  }
+
+  if (error || !product) {
+    return (
+      <div className="py-24 text-center">
+        <p className="text-red-600">{error || "Product not found"}</p>
+        <button className="underline mt-4" onClick={() => router.push("/shop")}>
+          Back to shop
+        </button>
+      </div>
+    );
+  }
 
   return (
     <div>
@@ -146,14 +286,8 @@ function ProductDetails() {
                 DESCRIPTION
               </h3>
               <p className="text-base leading-relaxed">
-                Mid-rise slightly oversized fit. Sport meets sophistication.
-                Your perfectly polished everyday pant crafted from luxury-grade
-                Supima cotton terry. A vintage-inspired straight leg that moves
-                seamlessly from morning workout to meetings to dinner plans. The
-                rare blend of athletic heritage and modern refinement,
-                enzyme-washed for the kind of softness that makes these an MVP
-                in your daily wardrobe. Model is 5&apos;7&quot; and a size
-                24&quot; and is wearing an XS.
+                {product.longDescription ??
+                  "No description available yet."}
               </p>
             </div>
 
@@ -162,22 +296,23 @@ function ProductDetails() {
               <h3 className="mb-4 text-[16px] font-semibold tracking-[0.2em] text-black uppercase">
                 DETAILS
               </h3>
-              <ul className="list-disc space-y-1 pl-5 text-base leading-relaxed">
-                <li>Premium 27 oz Supima cotton terry</li>
-                <li>Mid-rise with athletic-inspired straight leg</li>
-                <li>Clean waistband for studio-to-street style</li>
-                <li>Deep side pockets for essentials</li>
-                <li>Vintage sportswear silhouette, refined</li>
-                <li>MOVA embroidered signature</li>
-                <li>Enzyme-washed for lived-in comfort</li>
-                <li>100% Supima cotton</li>
-                <li>Care: machine wash cold, tumble dry low</li>
-                <li>(Oversized fit; if in between sizes, please size down)</li>
-                <li>Model is 5&apos;7&quot; wearing a size S</li>
-              </ul>
+
+              {/* If API provides details array -> render it, else fallback */}
+              {Array.isArray(product.details) && product.details.length ? (
+                <ul className="list-disc space-y-1 pl-5 text-base leading-relaxed">
+                  {product.details.map((d: string, idx: number) => (
+                    <li key={idx}>{d}</li>
+                  ))}
+                </ul>
+              ) : (
+                <ul className="list-disc space-y-1 pl-5 text-base leading-relaxed">
+                  <li>Premium fabric</li>
+                  <li>Care: machine wash cold</li>
+                </ul>
+              )}
             </div>
 
-            {/* SIZE CHART BUTTON (desktop example) */}
+            {/* SIZE CHART BUTTON */}
             <Dialog>
               <DialogTrigger asChild>
                 <Button
@@ -193,40 +328,32 @@ function ProductDetails() {
                     SIZE CHART
                   </DialogTitle>
                 </DialogHeader>
-                <img
-                  src="/assets/sizes.webp"
-                  alt="Sizes chart"
-                  className="w-full"
-                />
+                <img src="/assets/sizes.webp" alt="Sizes chart" className="w-full" />
               </DialogContent>
             </Dialog>
           </div>
         </div>
       </section>
 
-      {/* ⭐ RATING SUMMARY SECTION */}
+      {/* ⭐ RATING SUMMARY SECTION (still mock) */}
       <section className="w-full border-t border-neutral-200 py-10 md:py-14">
         <div className="mx-auto max-w-7xl px-6">
-          {/* Top line: average rating + stars + review count */}
           <div className="flex items-center justify-center gap-2 text-sm md:text-base mb-6">
-            <span className="font-semibold text-lg">
-              {averageRating.toFixed(1)}
-            </span>
+            <span className="font-semibold text-lg">{averageRating.toFixed(1)}</span>
+
             <span className="text-lg">
               {"★★★★★".slice(0, Math.round(averageRating))}
             </span>
+
             <span className="text-xs md:text-sm text-black/70">
               Based on {totalReviews} reviews
             </span>
           </div>
 
-          {/* Distribution rows */}
           <div className="space-y-2 text-xs md:text-sm">
             {starRows.map((star) => {
-              const count = ratingCounts[star] || 0;
-              const pct = totalReviews
-                ? (count / totalReviews) * 100
-                : 0;
+              const count = ratingCounts?.[star] || 0;
+              const pct = totalReviews ? (count / totalReviews) * 100 : 0;
 
               return (
                 <div key={star} className="flex items-center gap-2">
@@ -247,26 +374,22 @@ function ProductDetails() {
             })}
           </div>
 
-          {/* Recommend line */}
           <div className="mt-6 text-center text-sm md:text-base font-semibold">
             {recommendPercent}%{" "}
-            <span className="font-normal">
-              would recommend these products
-            </span>
+            <span className="font-normal">would recommend these products</span>
           </div>
         </div>
       </section>
 
+
+      {/* Reviews / questions unchanged */}
       <section className="w-full border-t border-neutral-200 py-10 md:py-14">
         <div className="px-16">
-          {/* Tabs */}
           <div className="border-b border-black flex items-center gap-6 text-lg tracking-[0.12em]">
             <button
               type="button"
               onClick={() => setActiveTab("reviews")}
-              className={`pb-2 ${activeTab === "reviews"
-                ? "border-b-2 border-black"
-                : "text-black/60"
+              className={`pb-2 ${activeTab === "reviews" ? "border-b-2 border-black" : "text-black/60"
                 }`}
             >
               Reviews ({totalReviews})
@@ -274,16 +397,13 @@ function ProductDetails() {
             <button
               type="button"
               onClick={() => setActiveTab("questions")}
-              className={`pb-2 ${activeTab === "questions"
-                ? "border-b-2 border-black"
-                : "text-black/60"
+              className={`pb-2 ${activeTab === "questions" ? "border-b-2 border-black" : "text-black/60"
                 }`}
             >
               Questions
             </button>
           </div>
 
-          {/* Filters + Write Review row */}
           <div className="mt-6 flex items-center justify-between">
             <button className="flex items-center gap-2 bg-black text-white px-4 py-2 text-lg font-durk tracking-[0.12em]">
               <FiFilter className="h-4 w-4" />
@@ -316,14 +436,7 @@ function ProductDetails() {
 
                   <div className="space-y-2">
                     <Label htmlFor="body">Review</Label>
-                    {/* Use Textarea from shadcn, or a normal textarea */}
-                    <Textarea
-                      id="body"
-                      name="body"
-                      rows={4}
-                      required
-                      className="resize-none"
-                    />
+                    <Textarea id="body" name="body" rows={4} required className="resize-none" />
                   </div>
 
                   <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
@@ -333,12 +446,7 @@ function ProductDetails() {
                     </div>
                     <div className="space-y-2">
                       <Label htmlFor="email">Email</Label>
-                      <Input
-                        id="email"
-                        name="email"
-                        type="email"
-                        placeholder="you@example.com"
-                      />
+                      <Input id="email" name="email" type="email" placeholder="you@example.com" />
                     </div>
                   </div>
 
@@ -349,7 +457,9 @@ function ProductDetails() {
                       </Button>
                     </DialogClose>
                     <DialogClose asChild>
-                      <Button type="submit" className="border">Submit review</Button>
+                      <Button type="submit" className="border">
+                        Submit review
+                      </Button>
                     </DialogClose>
                   </DialogFooter>
                 </form>
@@ -357,11 +467,12 @@ function ProductDetails() {
             </Dialog>
           </div>
 
-          {/* Reviews / Questions content */}
           <div className="mt-8 space-y-6">
             {activeTab === "reviews" ? (
-              reviews.length === 0 ? (
-                <p className="text-sm text-black/70">
+              reviewsLoading ? (
+                <p className="text-lg text-black/70">Loading reviews...</p>
+              ) : reviews.length === 0 ? (
+                <p className="text-lg text-black/70">
                   There are no reviews yet. Be the first to write one.
                 </p>
               ) : (
@@ -370,13 +481,27 @@ function ProductDetails() {
                     key={review.id}
                     className="border-b border-neutral-200 pb-4"
                   >
-                    <h4 className="text-sm font-semibold">
+                    {/* ⭐ STAR RATING */}
+                    <div className="flex items-center gap-1 text-xl text-yellow-500 mb-1">
+                      {Array.from({ length: 5 }).map((_, i) => (
+                        <span key={i}>
+                          {i < review.rating ? "★" : "☆"}
+                        </span>
+                      ))}
+                    </div>
+
+                    {/* TITLE */}
+                    <h4 className="text-lg font-semibold">
                       {review.title}
                     </h4>
-                    <p className="mt-2 text-sm leading-relaxed">
+
+                    {/* BODY */}
+                    <p className="mt-2 text-lg leading-relaxed">
                       {review.body}
                     </p>
-                    <p className="mt-2 text-xs text-black/60">
+
+                    {/* AUTHOR */}
+                    <p className="mt-2 text-sm text-black/60">
                       — {review.name}
                     </p>
                   </div>
@@ -388,36 +513,32 @@ function ProductDetails() {
               </p>
             )}
           </div>
+
         </div>
       </section>
 
+      {/* Featured products (now from API) */}
       <section className="w-full border-t border-neutral-200 py-10 md:py-14 bg-white">
-        <div className="">
+        <div>
           <h2 className="mb-6 pl-10 text-2xl md:text-3xl font-druk tracking-[0.18em] uppercase">
             FEATURED PRODUCTS
           </h2>
 
-          {/* horizontal strip of products */}
           <div className="flex overflow-x-auto border border-neutral-200 border-l-0 border-b-0">
             {featuredProducts.map((p) => (
               <a
                 key={p.id}
                 href={p.href}
-                className="flex flex-col flex-[0_0_60%] sm:flex-[0_0_40%] md:flex-[0_0_25%] lg:flex-[0_0_20%]
-                   border-l border-neutral-200 bg-white"
+                className="flex flex-col flex-[0_0_60%] sm:flex-[0_0_40%] md:flex-[0_0_25%] lg:flex-[0_0_20%] border-l border-neutral-200 bg-white"
               >
-                {/* IMAGE CONTAINER */}
                 <div className="relative w-full aspect-[3/4] bg-[#f5f5f5]">
-                  <Image
+                  <img
                     src={p.image}
                     alt={p.name}
-                    fill
                     sizes="(min-width: 1024px) 20vw, (min-width: 768px) 25vw, 60vw"
                     className="object-cover"
                   />
                 </div>
-
-                {/* TEXT UNDER IMAGE */}
                 <div className="px-4 py-3">
                   <p className="font-semibold text-[13px] tracking-wide">{p.name}</p>
                   <p className="text-[12px] text-black/80">{p.price} DH</p>
@@ -425,21 +546,13 @@ function ProductDetails() {
               </a>
             ))}
           </div>
-
         </div>
       </section>
 
       <PartsBanner />
 
-
-      <StickyAddToCartBar
-        name="LOW SHOW V BRALETTE"
-        price={475}
-        averageRating={5}
-        reviewCount={49}
-      />
+      {/* Sticky Add to cart uses fetched product */}
+      <StickyAddToCartBar averageRating={averageRating} reviewCount={totalReviews} />
     </div>
   );
 }
-
-export default ProductDetails;

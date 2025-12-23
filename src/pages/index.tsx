@@ -60,7 +60,6 @@ export default function Home() {
     <div className="min-h-[190vh] bg-white transition-colors duration-500"> 
       <HeroSection />
       <BestSellers
-        products={demo}
         onQuickAdd={(p, size) => {
           console.log("Quick add:", p.title, size);
         }}

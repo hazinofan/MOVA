@@ -15,23 +15,10 @@ import { ImGit } from "react-icons/im";
 type Size = "XS" | "S" | "M" | "L" | "XL" | "XXL";
 
 type BackendReview = { rating?: number | string | null };
-type BackendImage = { url?: string | null } | string;
-type BackendVariant = { size?: string | null } | string;
-
-type BackendProduct = {
-  id: string | number;
-  name?: string;
-  title?: string;
-  price?: number | string;
-  salePrice?: number | string | null;
-  images?: BackendImage[];
-  variants?: BackendVariant[];
-  reviews?: BackendReview[];
-  swatchNote?: string | null;
-};
 
 type UIProduct = {
-  id: string | number;
+  id: string | number
+  slug?: string;
   title: string;
   priceDh: number;
   image: string;
@@ -130,6 +117,7 @@ function mapToUI(p: ApiProduct): UIProduct | null {
   if (id == null) return null; // guard undefined/null ids
 
   const title = p.title ?? p.name ?? "Untitled";
+  const slug = p.slug ?? String(id);
   const priceDh = toNumber(p.salePrice ?? p.price ?? p.priceDh, 0);
 
   const ratingAvg = getAvgRating(p.reviews);
@@ -148,6 +136,7 @@ function mapToUI(p: ApiProduct): UIProduct | null {
 
   return {
     id,
+    slug,
     title,
     priceDh,
     image,
@@ -403,12 +392,14 @@ function ProductCard({
   return (
     <article className="group relative overflow-hidden bg-white">
       <div className="relative aspect-[3/4]">
+      <Link href={`/shop/${product.slug}`}>
         <img
           src={product.image}
           alt={product.title} 
           sizes="(max-width: 768px) 88vw, (max-width: 1024px) 48vw, 32vw"
           className="object-cover" 
         />
+        </Link>
       </div>
 
       <div className="px-5 py-4">
@@ -437,7 +428,7 @@ function ProductCard({
                     type="button"
                     onClick={() => setSelectedSize((prev) => (prev === sz ? null : sz))}
                     className={[
-                      "h-8 px-3 rounded-full border text-sm leading-none transition",
+                      "h-8 px-3 cursor-pointer rounded-full border text-sm leading-none transition",
                       "hover:translate-y-[-1px]",
                       active
                         ? "bg-black text-white border-black"
@@ -456,7 +447,7 @@ function ProductCard({
               onClick={handleAddToCart}
               disabled={!selectedSize || adding}
               className={[
-                "mt-3 w-full rounded-xl px-4 py-2 text-sm font-semibold transition",
+                "mt-3 w-full cursor-pointer rounded-xl px-4 py-2 text-sm font-semibold transition",
                 !selectedSize || adding
                   ? "bg-black/30 text-white cursor-not-allowed"
                   : "bg-black text-white hover:opacity-90",

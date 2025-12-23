@@ -7,6 +7,7 @@ import { FiMenu, FiX, FiShoppingBag } from "react-icons/fi";
 import { usePathname } from "next/navigation";
 import { Search } from "lucide-react";
 import { useCartStore } from "@/core/stores/cart.store";
+import { useRouter } from "next/router";
 
 type Ad = { text: string; href?: string };
 
@@ -44,6 +45,7 @@ export default function Navbar({
   const cartCount = useCartStore((s) => s.count());
   const subtotal = useCartStore((s) => s.subtotal());
 
+  const router = useRouter();
   const openCart = useCartStore((s) => s.open);
   const closeCart = useCartStore((s) => s.close);
   const removeItem = useCartStore((s) => s.removeItem);
@@ -474,8 +476,8 @@ export default function Navbar({
             </div>
 
             <button
-              className="w-full text-xs font-druk tracking-[0.18em] uppercase bg-black text-white py-3 rounded-full hover:bg-neutral-900 transition-colors"
-              onClick={closeCart}
+              className="w-full cursor-pointer text-xs font-druk tracking-[0.18em] uppercase bg-black text-white py-3 rounded-full hover:bg-neutral-800 transition-colors"
+              onClick={() => { router.push('/checkout'); closeCart(); }}
             >
               Checkout
             </button>

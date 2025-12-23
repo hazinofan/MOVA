@@ -1,4 +1,5 @@
 import React from "react";
+import Link from "next/link";
 
 type AdBannerProps = {
   variant?: "full" | "section";
@@ -82,9 +83,9 @@ export const AdBanner: React.FC<AdBannerProps> = ({
             {heroSubtitle}
           </p>
 
-          <button className="mt-10 mb-10 px-8 py-3 bg-white text-black border-2 border-black cursor-pointer font-semibold rounded-full hover:bg-gray-200 transition">
+          <Link href="/shop" className="mt-10 cursor-pointer mb-10 px-8 py-3 bg-white text-black border-2 border-black cursor-pointer font-semibold rounded-full hover:bg-gray-200 transition">
             {ctaLabel}
-          </button>
+          </Link>
         </div>
 
         <div className="absolute inset-0 bg-black/30" />

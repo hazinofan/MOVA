@@ -9,14 +9,32 @@ const headers = {
 export async function fetchProducts(
   page = 1,
   limit = 20,
-  includeArchived = false
+  includeArchived = false,
+  filters?: {
+    category?: string;        // single slug
+    categories?: string[];    // multiple slugs
+  }
 ): Promise<PaginatedProducts> {
-  const res = await fetch(
-    `${API_URL}/products?page=${page}&limit=${limit}&includeArchived=${includeArchived}`
-  );
+  const params = new URLSearchParams();
+
+  params.set("page", String(page));
+  params.set("limit", String(limit));
+  params.set("includeArchived", String(includeArchived));
+
+  if (filters?.category) {
+    params.set("category", filters.category);
+  }
+
+  if (filters?.categories?.length) {
+    params.set("categories", filters.categories.join(","));
+  }
+
+  const res = await fetch(`${API_URL}/products?${params.toString()}`);
+
   if (!res.ok) throw new Error("Failed to fetch products");
   return res.json();
 }
+
 
 export async function fetchProduct(id: number): Promise<Product> {
   const res = await fetch(`${API_URL}/products/${id}`);

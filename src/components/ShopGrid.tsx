@@ -18,7 +18,7 @@ type UIProduct = {
 type ApiProduct = any;
 
 const SIZE_OPTIONS = ["S", "M", "L", "XL"] as const;
-const COLOR_OPTIONS = ["BLACK", "WHITE", "BEIGE", "DARK GREY"] as const;
+// const COLOR_OPTIONS = ["BLACK", "WHITE", "BEIGE", "DARK GREY"] as const;
 
 function slugify(input: string) {
   return input
@@ -29,23 +29,20 @@ function slugify(input: string) {
     .replace(/^-+|-+$/g, "");
 }
 
-function toggleInArray(
-  value: string,
-  arr: string[],
-  setArr: (v: string[]) => void
-) {
+function toggleInArray(value: string, arr: string[], setArr: (v: string[]) => void) {
   setArr(arr.includes(value) ? arr.filter((x) => x !== value) : [...arr, value]);
 }
 
 function normalizeToken(s: string) {
-  return String(s || "")
-    .toLowerCase()
-    .trim()
-    .replace(/\s+/g, "-"); // "DARK GREY" -> "dark-grey"
+  return String(s || "").toLowerCase().trim().replace(/\s+/g, "-");
 }
 
 export function ShopGrid() {
+  const router = useRouter();
+
   const [rawProducts, setRawProducts] = useState<ApiProduct[]>([]);
+  const [total, setTotal] = useState(0);
+
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
 
@@ -54,12 +51,33 @@ export function ShopGrid() {
   const [selectedColors, setSelectedColors] = useState<string[]>([]);
   const [selectedCategories, setSelectedCategories] = useState<string[]>([]); // category.slug
 
-  const page = 1;
+  // ✅ pagination state
+  const [page, setPage] = useState(1);
   const limit = 20;
 
-  const API_ASSETS =
-    process.env.NEXT_PUBLIC_API_URL || "http://localhost:3001";
+  const API_ASSETS = process.env.NEXT_PUBLIC_API_URL || "http://localhost:3001";
 
+  // ✅ Read category from URL (optional): /shop?category=hoodies
+  useEffect(() => {
+    if (!router.isReady) return;
+
+    const q = router.query.category;
+    const incoming = Array.isArray(q) ? q : typeof q === "string" ? [q] : [];
+    const slugs = incoming.map((s) => String(s).trim()).filter(Boolean);
+
+    // if url has category, set it
+    if (slugs.length) {
+      setSelectedCategories(slugs);
+      setPage(1);
+    }
+  }, [router.isReady, router.query.category]);
+
+  // ✅ Reset page when filters change
+  useEffect(() => {
+    setPage(1);
+  }, [selectedCategories.join(","), selectedSizes.join(","), selectedColors.join(",")]);
+
+  // ✅ Fetch products from server based on page + server-side filters
   useEffect(() => {
     let cancelled = false;
 
@@ -68,8 +86,17 @@ export function ShopGrid() {
         setLoading(true);
         setError(null);
 
-        const data = await fetchProducts(page, limit, false);
-        if (!cancelled) setRawProducts(data?.items || []);
+        // Server-side category filtering (best ROI)
+        const filters = selectedCategories.length
+          ? { categories: selectedCategories }
+          : undefined;
+
+        const data = await fetchProducts(page, limit, false, filters);
+
+        if (!cancelled) {
+          setRawProducts(data?.items || []);
+          setTotal(Number(data?.total || 0));
+        }
       } catch (e: any) {
         if (!cancelled) setError(e?.message || "Failed to load products");
       } finally {
@@ -81,9 +108,10 @@ export function ShopGrid() {
     return () => {
       cancelled = true;
     };
-  }, [page, limit]);
+  }, [page, limit, selectedCategories.join(",")]); // server-side filters only here
 
-  // Build categories dynamically from API results
+  // Build categories list (NOTE: this is from the current page only.
+  // Better: fetch categories from a /categories endpoint.)
   const categories = useMemo(() => {
     const map = new Map<string, { slug: string; name: string }>();
     rawProducts.forEach((p: any) => {
@@ -91,31 +119,17 @@ export function ShopGrid() {
       const name = p?.category?.name;
       if (slug && name) map.set(slug, { slug, name });
     });
-    return Array.from(map.values()).sort((a, b) =>
-      a.name.localeCompare(b.name)
-    );
+    return Array.from(map.values()).sort((a, b) => a.name.localeCompare(b.name));
   }, [rawProducts]);
 
+  // Client-side size/color filtering (until you add them in backend)
   const filteredProducts: UIProduct[] = useMemo(() => {
-    const productInAnyCategory = (p: any) => {
-      if (!selectedCategories.length) return true;
-      const slug = p?.category?.slug;
-      return !!slug && selectedCategories.includes(slug);
-    };
-
     const productHasAnySize = (p: any) => {
       if (!selectedSizes.length) return true;
-      const availableSizes = (p?.variants || []).map((v: any) =>
-        String(v.size).toUpperCase()
-      );
-      return selectedSizes.some((s) =>
-        availableSizes.includes(String(s).toUpperCase())
-      );
+      const availableSizes = (p?.variants || []).map((v: any) => String(v.size).toUpperCase());
+      return selectedSizes.some((s) => availableSizes.includes(String(s).toUpperCase()));
     };
 
-    // COLOR NOTE:
-    // Your API has no "color" field. We filter by tags.
-    // For this to work, include tags like: "black", "white", "beige", "dark-grey"
     const productHasAnyColor = (p: any) => {
       if (!selectedColors.length) return true;
       const tags = (p?.tags || []).map((t: string) => normalizeToken(t));
@@ -123,13 +137,10 @@ export function ShopGrid() {
       return wanted.some((w) => tags.includes(w));
     };
 
-    const filtered = rawProducts
-      .filter(productInAnyCategory)
-      .filter(productHasAnySize)
-      .filter(productHasAnyColor);
+    const filtered = rawProducts.filter(productHasAnySize).filter(productHasAnyColor);
 
     return filtered.map((p: any) => {
-      const mainImg = p?.images?.[0]?.url; // your API doesn't have isMain yet
+      const mainImg = p?.images?.[0]?.url;
       const src = mainImg
         ? mainImg.startsWith("http")
           ? mainImg
@@ -142,29 +153,33 @@ export function ShopGrid() {
         name: p.name ?? "Unnamed",
         price: Number(p.price ?? 0),
         image: src,
-        // you don’t have a real mainColor from API; show first tag or category
         mainColor:
-          (p.tags?.[0] ? String(p.tags[0]).toUpperCase() : p?.category?.name) ||
-          "—",
+          (p.tags?.[0] ? String(p.tags[0]).toUpperCase() : p?.category?.name) || "—",
         quickAdd: true,
       };
     });
-  }, [
-    rawProducts,
-    selectedCategories,
-    selectedSizes,
-    selectedColors,
-    API_ASSETS,
-  ]);
+  }, [rawProducts, selectedSizes, selectedColors, API_ASSETS]);
 
-  const activeFiltersCount =
-    selectedCategories.length + selectedSizes.length + selectedColors.length;
+  const activeFiltersCount = selectedCategories.length + selectedSizes.length + selectedColors.length;
 
   function clearFilters() {
     setSelectedCategories([]);
     setSelectedSizes([]);
     setSelectedColors([]);
+    // optional: clean URL
+    router.replace("/shop", undefined, { shallow: true });
   }
+
+  // ✅ Pagination derived values
+  const totalPages = Math.max(1, Math.ceil(total / limit));
+  const canPrev = page > 1;
+  const canNext = page < totalPages;
+
+  const goToPage = (p: number) => {
+    const next = Math.min(Math.max(1, p), totalPages);
+    setPage(next);
+    window.scrollTo({ top: 0, behavior: "smooth" });
+  };
 
   return (
     <>
@@ -173,9 +188,7 @@ export function ShopGrid() {
         {/* CATEGORY */}
         <Popover>
           <PopoverTrigger asChild>
-            <span className="font-druk text-base underline cursor-pointer">
-              CATEGORY
-            </span>
+            <span className="font-druk text-base underline cursor-pointer">CATEGORY</span>
           </PopoverTrigger>
           <PopoverContent className="w-52 bg-gray-50/75">
             <div className="flex flex-col gap-2 text-xs font-druk">
@@ -183,20 +196,22 @@ export function ShopGrid() {
                 <div className="text-slate-500">No categories</div>
               ) : (
                 categories.map((cat) => (
-                  <label
-                    key={cat.slug}
-                    className="flex items-center gap-2 cursor-pointer"
-                  >
+                  <label key={cat.slug} className="flex items-center gap-2 cursor-pointer">
                     <input
                       type="checkbox"
                       checked={selectedCategories.includes(cat.slug)}
-                      onChange={() =>
-                        toggleInArray(
-                          cat.slug,
-                          selectedCategories,
-                          setSelectedCategories
-                        )
-                      }
+                      onChange={() => {
+                        toggleInArray(cat.slug, selectedCategories, setSelectedCategories);
+                        // keep URL in sync (optional)
+                        const nextCats = selectedCategories.includes(cat.slug)
+                          ? selectedCategories.filter((x) => x !== cat.slug)
+                          : [...selectedCategories, cat.slug];
+                        router.replace(
+                          nextCats.length ? `/shop?category=${encodeURIComponent(nextCats.join(","))}` : "/shop",
+                          undefined,
+                          { shallow: true }
+                        );
+                      }}
                       className="h-3 w-3 border border-black"
                     />
                     <span className="uppercase">{cat.name}</span>
@@ -210,9 +225,7 @@ export function ShopGrid() {
         {/* SIZE */}
         <Popover>
           <PopoverTrigger asChild>
-            <span className="font-druk text-base underline cursor-pointer">
-              SIZE
-            </span>
+            <span className="font-druk text-base underline cursor-pointer">SIZE</span>
           </PopoverTrigger>
           <PopoverContent className="w-40 bg-gray-50/75">
             <div className="flex flex-col gap-2 text-xs font-druk">
@@ -221,9 +234,7 @@ export function ShopGrid() {
                   <input
                     type="checkbox"
                     checked={selectedSizes.includes(s)}
-                    onChange={() =>
-                      toggleInArray(s, selectedSizes, setSelectedSizes)
-                    }
+                    onChange={() => toggleInArray(s, selectedSizes, setSelectedSizes)}
                     className="h-3 w-3 border border-black"
                   />
                   <span>{s}</span>
@@ -233,39 +244,9 @@ export function ShopGrid() {
           </PopoverContent>
         </Popover>
 
-        {/* COLOR */}
-        <Popover>
-          <PopoverTrigger asChild>
-            <span className="font-druk text-base underline cursor-pointer">
-              COLOR
-            </span>
-          </PopoverTrigger>
-          <PopoverContent className="w-40 bg-gray-50/75">
-            <div className="flex flex-col gap-2 text-xs font-druk">
-              {COLOR_OPTIONS.map((c) => (
-                <label key={c} className="flex items-center gap-2 cursor-pointer">
-                  <input
-                    type="checkbox"
-                    checked={selectedColors.includes(c)}
-                    onChange={() =>
-                      toggleInArray(c, selectedColors, setSelectedColors)
-                    }
-                    className="h-3 w-3 border border-black"
-                  />
-                  <span>{c}</span>
-                </label>
-              ))}
-            </div>
-          </PopoverContent>
-        </Popover>
-
         {/* Clear */}
         {activeFiltersCount > 0 && (
-          <button
-            type="button"
-            onClick={clearFilters}
-            className="font-druk text-base underline cursor-pointer"
-          >
+          <button type="button" onClick={clearFilters} className="font-druk text-base underline cursor-pointer">
             CLEAR ({activeFiltersCount})
           </button>
         )}
@@ -274,17 +255,11 @@ export function ShopGrid() {
       <section className="w-full bg-[#f5f5f5]">
         <div className="mt-16">
           {loading ? (
-            <div className="py-20 text-center font-druk tracking-[0.12em]">
-              LOADING PRODUCTS...
-            </div>
+            <div className="py-20 text-center font-druk tracking-[0.12em]">LOADING PRODUCTS...</div>
           ) : error ? (
             <div className="py-20 text-center text-red-600">{error}</div>
           ) : (
             <>
-              <div className="px-10 pb-4 text-[11px] md:text-xs font-druk tracking-[0.12em] text-slate-600">
-                SHOWING {filteredProducts.length} PRODUCTS
-                {activeFiltersCount > 0 ? " (FILTERED)" : ""}
-              </div>
 
               <div className="grid grid-cols-1 md:grid-cols-4">
                 {filteredProducts.map((p) => (
@@ -295,6 +270,33 @@ export function ShopGrid() {
               {filteredProducts.length === 0 && (
                 <div className="py-20 text-center font-druk tracking-[0.12em]">
                   NO PRODUCTS MATCH YOUR FILTERS
+                </div>
+              )}
+
+              {/* ✅ Pagination UI */}
+              {totalPages > 1 && (
+                <div className="px-10 py-10 flex items-center justify-center gap-3">
+                  <button
+                    type="button"
+                    onClick={() => goToPage(page - 1)}
+                    disabled={!canPrev}
+                    className="px-4 py-2 border rounded-lg font-druk disabled:opacity-40"
+                  >
+                    PREV
+                  </button>
+
+                  <span className="font-druk text-xs tracking-[0.12em]">
+                    PAGE {page} / {totalPages}
+                  </span>
+
+                  <button
+                    type="button"
+                    onClick={() => goToPage(page + 1)}
+                    disabled={!canNext}
+                    className="px-4 py-2 border rounded-lg font-druk disabled:opacity-40"
+                  >
+                    NEXT
+                  </button>
                 </div>
               )}
             </>
@@ -315,9 +317,7 @@ function ProductCard({ product }: { product: UIProduct }) {
           src={product.image}
           alt={product.name}
           className="object-cover h-full w-full cursor-pointer"
-          onClick={() => {
-            router.push(`/shop/${product.slug}`);
-          }}
+          onClick={() => router.push(`/shop/${product.slug}`)}
         />
 
         <div
@@ -349,9 +349,7 @@ function ProductCard({ product }: { product: UIProduct }) {
           <span>{product.mainColor}</span>
         </div>
 
-        <div className="mt-3 text-[12px] md:text-[13px]">
-          {product.price} DH
-        </div>
+        <div className="mt-3 text-[12px] md:text-[13px]">{product.price} DH</div>
       </div>
     </div>
   );

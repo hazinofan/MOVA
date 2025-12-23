@@ -140,7 +140,7 @@ export default function HeroSection() {
         <div className="mt-5 flex items-center gap-4">
           {SLIDES[index].ctaHref && SLIDES[index].ctaLabel && (
             <Link
-              href={SLIDES[index].ctaHref!}
+              href='/shop'
               className="inline-block rounded-full border border-white/80 bg-white/10 px-6 py-2 text-white
                          backdrop-blur hover:bg-white hover:text-black transition"
             >

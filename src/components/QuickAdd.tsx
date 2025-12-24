@@ -20,7 +20,7 @@ const BRAS: Product[] = [
     title: "Soft Triangle Bra in Blush",
     subtitle: "ARCTIC BLUE + 5 OTHER",
     price: 475,
-    image: "/assets/image1.png",
+    image: "/assets/image.png",
   },
   {
     id: 2,
@@ -58,7 +58,7 @@ const BOTTOMS: Product[] = [
     title: "Soft Brief in Blush",
     subtitle: "BLUSH + 5 OTHER",
     price: 285,
-    image: "/assets/image4.png",
+    image: "/assets/image.png",
   },
   {
     id: 7,
@@ -202,7 +202,7 @@ export function MixAndMatchSection() {
             </h2>
 
             <Link
-              href="/collections/sets"
+              href="/creative"
               className="mt-4 md:mt-6 inline-block text-sm md:text-lg font-medium underline underline-offset-4"
             >
               Build Your Set

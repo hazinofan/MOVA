@@ -20,6 +20,7 @@ const ADS: Ad[] = [
 const NAV = [
   { href: "/shop", label: "SHOP" },
   { href: "/about", label: "ABOUT" },
+  { href: "/creative", label: "MADE BY YOU" },
   { href: "/search", label: "SEARCH" },
   { href: "/blog", label: "MOVAFASHION" },
 ];

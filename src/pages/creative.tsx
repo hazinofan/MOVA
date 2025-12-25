@@ -177,7 +177,7 @@ export default function CreativePage() {
                                 Shop
                             </Link>
 
-                            <Link href="/customize" className="w-full sm:w-auto">
+                            <Link href="/studio" className="w-full sm:w-auto">
                                 <Button className="flex flex-row text-base bg-red-100 bg-gradient-to-b from-white via-[#f4f4f4] to-[#eaeaea] border border-gray-300 py-5 !px-16 rounded-tl-full rounded-br-full cursor-pointer hover:rounded-full ">
                                     <Sparkles className="mr-2 h-5 w-5" />
                                     Start customizing
@@ -208,7 +208,7 @@ export default function CreativePage() {
                             </p>
 
                             <div className="mt-8 flex flex-col gap-3 sm:flex-row">
-                                <Link href="/customize" className="group inline-block w-full sm:w-auto">
+                                <Link href="/studio" className="group inline-block w-full sm:w-auto">
                                     <button
                                         type="button"
                                         className=" relative w-full sm:w-auto overflow-hidden rounded-tl-full rounded-br-full px-16 py-3 cursor-pointer bg-gradient-to-br from-[#0f0f0f] via-[#1b1b1b] to-[#2d2d2d] text-base font-semibold text-white shadow-[0_12px_30px_rgba(0,0,0,0.25)] transition-all duration-300 ease-out hover:rounded-full hover:brightness-110 active:scale-[0.98]     "
@@ -391,7 +391,7 @@ export default function CreativePage() {
                                         </span>
 
                                         <div className="leading-none">
-                                            <div className="text-base font-semibold">MOVA Studio</div>
+                                            <div className="text-base">MOVA Studio</div>
                                             <div className="text-base text-black/55">Live preview</div>
                                         </div>
                                     </div>
@@ -458,7 +458,7 @@ export default function CreativePage() {
                                         {/* CTA */}
                                         <div className="mt-6 grid gap-3">
                                             <Link
-                                                href="/customize"
+                                                href="/studio"
                                                 className="group inline-flex w-full items-center justify-center rounded-full bg-black px-7 py-4 text-base font-semibold text-white shadow-sm transition hover:bg-black/90"
                                             >
                                                 Create now

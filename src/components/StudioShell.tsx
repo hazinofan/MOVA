@@ -39,19 +39,37 @@ export default function StudioShell() {
   const [resetSignal, setResetSignal] = useState(0);
   type WorkspaceTheme = "light" | "dark";
   const [workspaceTheme, setWorkspaceTheme] = useState<WorkspaceTheme>("light");
-
   const isDark = workspaceTheme === "dark";
+
+  const sidebar = {
+    sectionTitle: isDark ? "text-white" : "text-neutral-900",
+    hint: isDark ? "text-white/55" : "text-neutral-500",
+    line: isDark ? "border-white/10" : "border-black/10",
+
+    // surfaces
+    surface: isDark ? "bg-neutral-950" : "bg-white",
+
+    // buttons (idle)
+    btnIdle: isDark
+      ? "border-white/10 bg-white/[0.03] text-white hover:bg-white/[0.06]"
+      : "border-black/10 bg-white text-neutral-900 hover:bg-black/[0.03]",
+
+    // buttons (active)
+    btnActive: isDark
+      ? "border-white/20 bg-white/[0.10] text-white"
+      : "border-black bg-black text-white",
+
+    // little thumbnail boxes
+    thumbIdle: isDark ? "border-white/10 bg-white/[0.03]" : "border-black/10 bg-neutral-50",
+    thumbActive: isDark ? "border-white/20 bg-white/[0.06]" : "border-white/20 bg-black/10",
+  };
 
   const pageBg = isDark ? "bg-neutral-950 text-white" : "bg-neutral-100 text-neutral-900";
   const frameBg = isDark ? "bg-neutral-900 border-white/10" : "bg-white border-black/10";
-  const divider = isDark ? "border-white/10" : "border-black/10";
+  const divider = isDark ? "border-black/10" : "border-white/10";
   const panelBg = isDark ? "bg-neutral-900" : "bg-white";
+  const hoverBg = isDark ? "hover:bg-white/10" : "hover:bg-black/[0.03]";
   const subtle = isDark ? "text-white/60" : "text-neutral-500";
-  const btn = isDark
-    ? "border-white/10 bg-white/5 hover:bg-white/10 text-white"
-    : "border-black/10 bg-white hover:bg-black/[0.03] text-neutral-900";
-
-
 
   // per-area design (Printify style)
   const [designByArea, setDesignByArea] = useState<Record<string, string | null>>({});
@@ -60,6 +78,20 @@ export default function StudioShell() {
   function setAreaDesign(src: string | null) {
     setDesignByArea((prev) => ({ ...prev, [areaId]: src }));
   }
+
+  const onViewportWheel = useCallback((e: React.WheelEvent) => {
+    // stop page from scrolling
+    e.preventDefault();
+
+    // smooth zoom factor
+    const delta = e.deltaY;
+    const step = 0.06; // feel free to tweak (0.04 to 0.10)
+
+    setZoom((z) => {
+      const next = delta > 0 ? z * (1 - step) : z * (1 + step);
+      return Math.min(2.5, Math.max(0.15, +next.toFixed(3)));
+    });
+  }, []);
 
   // per-area transforms (each area remembers its position/scale)
   const [transformByArea, setTransformByArea] = useState<Record<string, Transform | null>>({});
@@ -74,6 +106,42 @@ export default function StudioShell() {
   const area = useMemo(() => {
     return (product as any).areas?.find((a: any) => a.id === areaId) ?? (product as any).areas?.[0];
   }, [product, areaId]);
+
+  const viewportRef = useRef<HTMLDivElement | null>(null);
+
+  // user zoom (like Printify) - 15% to 250%
+  const [zoom, setZoom] = useState(1);
+
+  // base scale that fits the whole stage into available space
+  const [fitScale, setFitScale] = useState(1);
+
+  // final scale used for display only
+  const displayScale = fitScale * zoom;
+
+  useEffect(() => {
+    const el = viewportRef.current;
+    if (!el) return;
+
+    const ro = new ResizeObserver(() => {
+      const rect = el.getBoundingClientRect();
+
+      // leave some breathing room (padding + toolbar)
+      const pad = 24;
+      const availableW = Math.max(100, rect.width - pad * 2);
+      const availableH = Math.max(100, rect.height - pad * 2);
+
+      const s = Math.min(availableW / stageSize.w, availableH / stageSize.h);
+      setFitScale(s);
+    });
+
+    ro.observe(el);
+    return () => ro.disconnect();
+  }, [stageSize.w, stageSize.h]);
+
+  function fitToView() {
+    setZoom(1);
+  }
+
 
   // Only show Front/Back in UI if present on product
   const uiAreas = useMemo(() => {
@@ -131,6 +199,8 @@ export default function StudioShell() {
     for (const a of (product as any).areas ?? []) next[a.id] = src;
     setDesignByArea(next);
   }
+
+  const STUDIO_H = "h-[calc(100vh-100px)]";
 
   // ---------- RIGHT PREVIEW (exact export crop) ----------
   const [exportPreviewSrc, setExportPreviewSrc] = useState<string | null>(null);
@@ -199,15 +269,17 @@ export default function StudioShell() {
     );
   }
 
+  const bodyH = "h-[calc(100vh-64px-24px-24px-72px)]";
+
   return (
-    <div className={`min-h-[calc(100vh-64px)] ${pageBg}`}>
+    <div className={`min-h-[calc(107vh-64px)] ${pageBg}`}>
       <div className="mx-auto max-w-[120rem] px-4 py-6">
         {/* Unified workspace frame */}
         <div className={`overflow-hidden rounded-3xl border ${frameBg} shadow-sm`}>
           {/* Top bar */}
-          <div className="flex items-center justify-between gap-3 px-5 py-4">
+          <div className="flex items-center justify-between gap-3 px-5 py-2 border-b border-gray-300">
             <div className="flex items-center gap-3">
-              <button className="h-10 rounded-xl border border-black/10 bg-white px-3 text-sm hover:bg-black/[0.03]">
+              <button className="h-10 rounded-xl border ${divider} ${panelBg} ${hoverBg} px-3 text-sm hover:bg-black/[0.03]">
                 ←
               </button>
 
@@ -219,7 +291,7 @@ export default function StudioShell() {
 
             <div className="flex items-center gap-2">
               {/* Workspace theme toggle */}
-              <div className="flex items-center gap-1 rounded-xl border border-black/10 bg-white p-1">
+              <div className="flex items-center gap-1 rounded-xl border ${divider} ${panelBg} ${hoverBg} p-1">
                 <button
                   onClick={() => setWorkspaceTheme("light")}
                   className={[
@@ -244,7 +316,7 @@ export default function StudioShell() {
                 </button>
               </div>
 
-              <button className="h-10 rounded-xl border border-black/10 bg-white px-4 text-sm hover:bg-black/[0.03]">
+              <button className="h-10 rounded-xl border ${divider} ${panelBg} ${hoverBg} px-4 text-sm hover:bg-black/[0.03]">
                 Save & exit
               </button>
 
@@ -255,14 +327,18 @@ export default function StudioShell() {
           </div>
 
           {/* 3-panel body with ONLY dividers */}
-          <div className="grid grid-cols-1 lg:grid-cols-[320px_1fr_320px] border-t border-black/10">
-            {/* LEFT PANEL */}
-            <aside className="min-h-[70vh] lg:min-h-[calc(100vh-64px-24px-24px-80px)]">
-              <div className="h-full border-r border-black/10">
-                <div className="p-4">
-                  <div className="text-sm font-semibold">Upload</div>
+          <div
+            className={`grid grid-cols-1 lg:grid-cols-[320px_1fr_320px] border-t ${divider} ${STUDIO_H}`}
+          >
 
-                  <label className="mt-3 grid h-11 cursor-pointer place-items-center rounded-xl border border-black/10 bg-white text-sm font-semibold hover:bg-black/[0.03]">
+            {/* LEFT PANEL */}
+            <aside className={`h-full border-r ${sidebar.line} ${sidebar.surface}`}>
+              <div className={`h-full flex flex-col`}>
+                {/* Upload */}
+                <div className="p-4">
+                  <div className={`text-sm font-druk ${sidebar.sectionTitle}`}>Upload</div>
+
+                  <label className={`mt-3 grid h-11 cursor-pointer place-items-center rounded-xl border text-sm font-semibold ${sidebar.btnIdle}`}>
                     Upload from device
                     <input
                       type="file"
@@ -279,7 +355,7 @@ export default function StudioShell() {
                     <button
                       onClick={applyToAllAreas}
                       disabled={!designSrc}
-                      className="h-10 rounded-xl border border-black/10 bg-white px-3 text-sm hover:bg-black/[0.03] disabled:opacity-40"
+                      className={`h-10 rounded-xl border px-3 text-sm disabled:opacity-40 ${sidebar.btnIdle}`}
                     >
                       Apply to all
                     </button>
@@ -287,24 +363,24 @@ export default function StudioShell() {
                     <button
                       onClick={() => setAreaDesign(null)}
                       disabled={!designSrc}
-                      className="h-10 rounded-xl border border-black/10 bg-white px-3 text-sm hover:bg-black/[0.03] disabled:opacity-40"
+                      className={`h-10 rounded-xl border px-3 text-sm disabled:opacity-40 ${sidebar.btnIdle}`}
                     >
                       Remove
                     </button>
                   </div>
 
-                  <div className="mt-3 text-xs text-neutral-500">
+                  <div className={`mt-3 text-xs ${sidebar.hint}`}>
                     Best: PNG with transparent background.
                   </div>
                 </div>
 
-                <div className="border-t border-black/10" />
+                <div className={`border-t ${sidebar.line}`} />
 
                 {/* Scroll content */}
-                <div className="max-h-[calc(100vh-64px-24px-24px-140px)] overflow-auto p-4 space-y-6">
+                <div className="flex-1 overflow-y-auto p-4 space-y-6">
                   {/* Products */}
                   <div className="space-y-3">
-                    <div className="text-sm font-semibold">Products</div>
+                    <div className={`text-sm font-druk ${sidebar.sectionTitle}`}>Products</div>
 
                     <div className="grid gap-2">
                       {PRODUCTS.map((p) => {
@@ -317,23 +393,21 @@ export default function StudioShell() {
                             onClick={() => setProductId(p.id)}
                             className={[
                               "w-full rounded-2xl border px-3 py-3 text-left transition",
-                              active
-                                ? "border-black bg-black text-white"
-                                : "border-black/10 bg-white hover:bg-black/[0.03]",
+                              active ? sidebar.btnActive : sidebar.btnIdle,
                             ].join(" ")}
                           >
                             <div className="flex items-center gap-3">
                               <div
                                 className={[
                                   "h-12 w-12 overflow-hidden rounded-xl border grid place-items-center",
-                                  active ? "border-white/20 bg-white/10" : "border-black/10 bg-neutral-50",
+                                  active ? sidebar.thumbActive : sidebar.thumbIdle,
                                 ].join(" ")}
                               >
                                 {thumb ? (
                                   // eslint-disable-next-line @next/next/no-img-element
                                   <img src={thumb} alt={p.label} className="h-full w-full object-cover" />
                                 ) : (
-                                  <span className={active ? "text-white/60 text-xs" : "text-neutral-400 text-xs"}>
+                                  <span className={active ? "text-white/70 text-xs" : `${sidebar.hint} text-xs`}>
                                     IMG
                                   </span>
                                 )}
@@ -354,7 +428,7 @@ export default function StudioShell() {
 
                   {/* Parts */}
                   <div className="space-y-3">
-                    <div className="text-sm font-semibold">Part</div>
+                    <div className={`text-sm font-druk ${sidebar.sectionTitle}`}>Part</div>
                     <div className="grid grid-cols-2 gap-2">
                       {uiAreas.map((a: any) => {
                         const active = a.id === areaId;
@@ -364,9 +438,7 @@ export default function StudioShell() {
                             onClick={() => setAreaId(a.id)}
                             className={[
                               "h-10 rounded-xl border text-sm transition",
-                              active
-                                ? "border-black bg-black text-white"
-                                : "border-black/10 bg-white hover:bg-black/[0.03]",
+                              active ? sidebar.btnActive : sidebar.btnIdle,
                             ].join(" ")}
                           >
                             {a.label ?? a.id}
@@ -378,27 +450,32 @@ export default function StudioShell() {
 
                   {/* Color */}
                   <div className="space-y-3">
-                    <div className="text-sm font-semibold">Product color</div>
+                    <div className={`text-sm font-druk ${sidebar.sectionTitle}`}>Product color</div>
+
                     <div className="grid grid-cols-2 gap-2">
                       {COLORS.map((c) => {
                         const active = c.id === color;
+
+                        // IMPORTANT: dot never disappears
+                        const dotClass =
+                          c.id === "white"
+                            ? isDark
+                              ? "bg-white border-white/30"
+                              : "bg-white border-black/20"
+                            : isDark
+                              ? "bg-black border-white/20"
+                              : "bg-black border-black/20";
+
                         return (
                           <button
                             key={c.id}
                             onClick={() => setColor(c.id)}
                             className={[
                               "h-10 rounded-xl border text-sm transition flex items-center justify-center gap-2",
-                              active
-                                ? "border-black bg-black text-white"
-                                : "border-black/10 bg-white hover:bg-black/[0.03]",
+                              active ? sidebar.btnActive : sidebar.btnIdle,
                             ].join(" ")}
                           >
-                            <span
-                              className={[
-                                "h-4 w-4 rounded-full border",
-                                c.id === "white" ? "bg-white border-black/20" : "bg-black border-black/20",
-                              ].join(" ")}
-                            />
+                            <span className={`h-4 w-4 rounded-full border ${dotClass}`} />
                             {c.label}
                           </button>
                         );
@@ -408,11 +485,12 @@ export default function StudioShell() {
 
                   {/* Tools */}
                   <div className="space-y-3">
-                    <div className="text-sm font-semibold">Tools</div>
+                    <div className={`text-sm font-druk ${sidebar.sectionTitle}`}>Tools</div>
+
                     <div className="grid grid-cols-2 gap-2">
                       <button
                         onClick={() => setShowPrintArea((v) => !v)}
-                        className="h-10 rounded-xl border border-black/10 bg-white text-sm hover:bg-black/[0.03]"
+                        className={`h-10 rounded-xl border text-sm ${sidebar.btnIdle}`}
                       >
                         {showPrintArea ? "Hide area" : "Show area"}
                       </button>
@@ -420,7 +498,7 @@ export default function StudioShell() {
                       <button
                         onClick={() => setSnapSignal((v) => v + 1)}
                         disabled={!designSrc}
-                        className="h-10 rounded-xl border border-black/10 bg-white text-sm hover:bg-black/[0.03] disabled:opacity-40"
+                        className={`h-10 rounded-xl border text-sm disabled:opacity-40 ${sidebar.btnIdle}`}
                       >
                         Center
                       </button>
@@ -428,7 +506,7 @@ export default function StudioShell() {
                       <button
                         onClick={() => setResetSignal((v) => v + 1)}
                         disabled={!designSrc}
-                        className="h-10 rounded-xl border border-black/10 bg-white text-sm hover:bg-black/[0.03] disabled:opacity-40 col-span-2"
+                        className={`h-10 rounded-xl border text-sm disabled:opacity-40 col-span-2 ${sidebar.btnIdle}`}
                       >
                         Reset
                       </button>
@@ -438,63 +516,79 @@ export default function StudioShell() {
               </div>
             </aside>
 
+
             {/* MIDDLE PANEL */}
-            <main
-              className={[
-                "relative",
-                workspaceTheme === "dark" ? "bg-neutral-900" : "bg-neutral-50",
-              ].join(" ")}
-            >
-              {/* Top variant icons (optional placeholder like screenshot) */}
-              <div className="flex items-center justify-center gap-2 py-4">
-                <button className="h-9 w-9 rounded-xl border border-black/10 bg-white hover:bg-black/[0.03]" />
-                <button className="h-9 w-9 rounded-xl border border-black/10 bg-white hover:bg-black/[0.03]" />
-                <button className="h-9 w-9 rounded-xl border border-black/10 bg-white hover:bg-black/[0.03]" />
-                <button className="h-9 w-9 rounded-xl border border-black/10 bg-white hover:bg-black/[0.03]" />
+            <main className={`relative h-full overflow-hidden ${isDark ? "bg-neutral-950" : "bg-neutral-50"}`}>
+              {/* top small icons row (optional) */}
+              <div className="grid grid-cols-2 gap-2 mx-auto max-w-3xl pt-5 gap-16">
+                {uiAreas.map((a: any) => {
+                  const active = a.id === areaId;
+                  return (
+                    <button
+                      key={a.id}
+                      onClick={() => setAreaId(a.id)}
+                      className={[
+                        "h-10 rounded-xl border text-sm transition",
+                        active ? sidebar.btnActive : sidebar.btnIdle,
+                      ].join(" ")}
+                    >
+                      {a.label ?? a.id}
+                    </button>
+                  );
+                })}
               </div>
 
-              <div className="px-4 pb-6">
-                {/* The playground container */}
-                <div className="mx-auto max-w-[920px]">
-                  <div className="rounded-2xl border border-black/10 bg-white">
-                    <div className="p-3">
-                      <ProductStage
-                        product={product}
-                        mockupSrc={mockupSrc}
-                        printArea={area?.printArea}
-                        designSrc={designSrc}
-                        stageSize={stageSize}
-                        showPrintArea={showPrintArea}
-                        snapToCenterSignal={snapSignal}
-                        resetSignal={resetSignal}
-                        onStageRef={(s) => (stageRef.current = s)}
-                        onDesignTransformChange={handleDesignTransformChange}
-                      />
+              {/* VIEWPORT AREA: takes all remaining height */}
+              <div
+                ref={viewportRef}
+                onWheel={onViewportWheel}
+                className="h-[calc(100%-64px)] px-4 pb-4 overflow-hidden"
+              >
+                <div className="h-full w-full flex items-center justify-center">
+                  {/* This wrapper is the key: we render stage at real size, but SCALE it */}
+                  <div
+                    style={{
+                      width: stageSize.w,
+                      height: stageSize.h,
+                      transform: `scale(${displayScale})`,
+                      transformOrigin: "center center",
+                    }}
+                    className="will-change-transform"
+                  >
+                    <div className={`rounded-2xl border ${divider} ${panelBg} overflow-hidden`}>
+                      <div className="p-3">
+                        <ProductStage
+                          product={product}
+                          mockupSrc={mockupSrc}
+                          printArea={area?.printArea?.[color] ?? area?.printArea}
+                          designSrc={designSrc}
+                          color={color}
+                          stageSize={stageSize}
+                          showPrintArea={showPrintArea}
+                          snapToCenterSignal={snapSignal}
+                          resetSignal={resetSignal}
+                          onStageRef={(s) => (stageRef.current = s)}
+                          onDesignTransformChange={handleDesignTransformChange}
+                        />
+                      </div>
                     </div>
                   </div>
-
-                  {/* Bottom mini toolbar (minimal) */}
-                  <div className="mt-4 flex items-center justify-center gap-2">
-                    <ToolPill>Move</ToolPill>
-                    <ToolPill>Text</ToolPill>
-                    <ToolPill>Rotate</ToolPill>
-                    <ToolPill>Undo</ToolPill>
-                    <ToolPill>Redo</ToolPill>
-                  </div>
                 </div>
+
               </div>
             </main>
 
+
             {/* RIGHT PANEL */}
-            <aside className="border-t border-black/10 lg:border-t-0">
-              <div className="h-full border-l border-black/10">
+            <aside className="border-t ${divider} lg:border-t-0">
+              <div className="h-full border-l ${divider}">
                 <div className="p-4">
                   <div className="text-sm font-semibold">Export preview</div>
                   <div className="mt-1 text-xs text-neutral-500">
                     Exactly what you’ll download (transparent PNG).
                   </div>
 
-                  <div className="mt-4 overflow-hidden rounded-2xl border border-black/10 bg-white">
+                  <div className="mt-4 overflow-hidden rounded-2xl border ${divider} ${panelBg} ${hoverBg}">
                     <div className="aspect-square w-full grid place-items-center">
                       {exportPreviewSrc ? (
                         // eslint-disable-next-line @next/next/no-img-element
@@ -519,7 +613,7 @@ export default function StudioShell() {
                     <button
                       onClick={exportJSON}
                       disabled={!designSrc || !currentTransform}
-                      className="h-11 w-full rounded-xl border border-black/10 bg-white text-sm hover:bg-black/[0.03] disabled:opacity-40"
+                      className="h-11 w-full rounded-xl border ${divider} ${panelBg} ${hoverBg} text-sm hover:bg-black/[0.03] disabled:opacity-40"
                     >
                       Download JSON
                     </button>
@@ -527,9 +621,37 @@ export default function StudioShell() {
                     <button
                       onClick={() => setAreaDesign(null)}
                       disabled={!designSrc}
-                      className="h-11 w-full rounded-xl border border-black/10 bg-white text-sm hover:bg-black/[0.03] disabled:opacity-40"
+                      className="h-11 w-full rounded-xl border ${divider} ${panelBg} ${hoverBg} text-sm hover:bg-black/[0.03] disabled:opacity-40"
                     >
                       Clear design
+                    </button>
+                  </div>
+
+                  <h1 className=" font-druk mt-5 justify-self-center"> ZOOM CONTROLS </h1>
+                  <div className="mt-4 flex items-center justify-center gap-2">
+                    <button
+                      onClick={() => setZoom((z) => Math.max(0.15, +(z - 0.1).toFixed(2)))}
+                      className={`h-10 rounded-xl border border-gray-400 px-4 text-sm ${hoverBg}`}
+                    >
+                      −
+                    </button>
+
+                    <div className={`h-10 rounded-xl border border-gray-400 px-4 text-sm grid place-items-center`}>
+                      {Math.round(displayScale * 100)}%
+                    </div>
+
+                    <button
+                      onClick={() => setZoom((z) => Math.min(2.5, +(z + 0.1).toFixed(2)))}
+                      className={`h-10 rounded-xl border border-gray-400 px-4 text-sm ${hoverBg}`}
+                    >
+                      +
+                    </button>
+
+                    <button
+                      onClick={fitToView}
+                      className={`h-10 rounded-xl border border-gray-400 px-4 text-sm ${hoverBg}`}
+                    >
+                      Fit
                     </button>
                   </div>
                 </div>
@@ -544,7 +666,7 @@ export default function StudioShell() {
   // small helper
   function ToolPill({ children }: { children: React.ReactNode }) {
     return (
-      <button className="h-10 rounded-xl border border-black/10 bg-white px-4 text-sm hover:bg-black/[0.03]">
+      <button className="h-10 rounded-xl border ${divider} ${panelBg} ${hoverBg} px-4 text-sm hover:bg-black/[0.03]">
         {children}
       </button>
     );

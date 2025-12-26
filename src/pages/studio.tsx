@@ -5,3 +5,4 @@ export default function StudioPage() {
 }
 
 StudioPage.hideNavbar = true;
+StudioPage.hideFooter = true;

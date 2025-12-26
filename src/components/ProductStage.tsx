@@ -4,7 +4,7 @@ import React, { useEffect, useMemo, useRef } from "react";
 import useImage from "use-image";
 import { Stage, Layer, Image as KImage, Rect, Transformer } from "react-konva";
 import type Konva from "konva";
-import type { ProductConfig, PrintArea } from "@/lib/products";
+import type { ProductConfig, PrintArea, ProductColor } from "@/lib/products";
 
 type TransformPayload = {
   x: number;
@@ -27,6 +27,9 @@ type Props = {
   snapToCenterSignal: number; // increment to trigger snap
   resetSignal: number; // increment to trigger reset
   onStageRef?: (stage: Konva.Stage | null) => void;
+
+  // ✅ NEW: needed to pick print area border color
+  color: ProductColor;
 };
 
 function clamp(v: number, min: number, max: number) {
@@ -44,6 +47,7 @@ export default function ProductStage({
   snapToCenterSignal,
   resetSignal,
   onStageRef,
+  color, // ✅ NEW
 }: Props) {
   const stageRef = useRef<Konva.Stage>(null);
   const designRef = useRef<Konva.Image>(null);
@@ -52,7 +56,7 @@ export default function ProductStage({
   const [mockupImg] = useImage(mockupSrc, "anonymous");
   const [designImg] = useImage(designSrc ?? "", "anonymous");
 
-  const pa = printArea ?? { x: 0.33, y: 0.22, w: 0.34, h: 0.48 };
+  const pa = (printArea ?? { x: 0.33, y: 0.22, w: 0.34, h: 0.48 }) as { x: number; y: number; w: number; h: number };
 
   const printPx = useMemo(() => {
     const { w, h } = stageSize;
@@ -63,6 +67,11 @@ export default function ProductStage({
       h: pa.h * h,
     };
   }, [pa.x, pa.y, pa.w, pa.h, stageSize]);
+
+  // ✅ Print area border color based on variant color
+  // white garment => black border; black garment => white border
+  const printStrokeOuter = color === "white" ? "rgba(0,0,0,0.75)" : "rgba(255,255,255,0.85)";
+  const printStrokeInner = color === "white" ? "rgba(0,0,0,0.35)" : "rgba(255,255,255,0.35)";
 
   // Initialize design position when loaded OR when we switch area/mockup
   useEffect(() => {
@@ -244,7 +253,7 @@ export default function ProductStage({
                   y={printPx.y}
                   width={printPx.w}
                   height={printPx.h}
-                  stroke="rgba(255,255,255,0.8)"
+                  stroke={printStrokeOuter} 
                   dash={[10, 8]}
                   cornerRadius={12}
                   listening={false}
@@ -254,7 +263,7 @@ export default function ProductStage({
                   y={printPx.y + 10}
                   width={Math.max(0, printPx.w - 20)}
                   height={Math.max(0, printPx.h - 20)}
-                  stroke="rgba(255,255,255,0.35)"
+                  stroke={printStrokeInner} 
                   dash={[6, 10]}
                   cornerRadius={10}
                   listening={false}

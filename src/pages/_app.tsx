@@ -6,6 +6,7 @@ import type { AppProps } from "next/app";
 export default function App({ Component, pageProps }: AppProps) {
   // read the static property from the page
   const hideNavbar = (Component as any).hideNavbar;
+  const hideFooter = (Component as any).hideFooter
 
   return (
     <div className="flex min-h-screen flex-col bg-[#fafafa]">
@@ -18,7 +19,7 @@ export default function App({ Component, pageProps }: AppProps) {
       </main>
 
       {/* FOOTER */}
-      <SiteFooter />
+      {!hideFooter && <SiteFooter />}
     </div>
   );
 }

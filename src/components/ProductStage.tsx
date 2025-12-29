@@ -7,13 +7,21 @@ import type Konva from "konva";
 import type { ProductConfig, PrintArea, ProductColor } from "@/lib/products";
 
 type TransformPayload = {
+  // stage px values (good for saving exact current state)
   x: number;
   y: number;
+  width: number;
+  height: number;
+
+  // normalized relative to print area (good for previews)
+  nx: number;
+  ny: number;
+  nw: number;
+  nh: number;
+
   scaleX: number;
   scaleY: number;
   rotation: number;
-  width: number;
-  height: number;
 };
 
 type Props = {
@@ -56,7 +64,12 @@ export default function ProductStage({
   const [mockupImg] = useImage(mockupSrc, "anonymous");
   const [designImg] = useImage(designSrc ?? "", "anonymous");
 
-  const pa = (printArea ?? { x: 0.33, y: 0.22, w: 0.34, h: 0.48 }) as { x: number; y: number; w: number; h: number };
+  const pa = (printArea ?? { x: 0.33, y: 0.22, w: 0.34, h: 0.48 }) as {
+    x: number;
+    y: number;
+    w: number;
+    h: number;
+  };
 
   const printPx = useMemo(() => {
     const { w, h } = stageSize;
@@ -70,8 +83,10 @@ export default function ProductStage({
 
   // ✅ Print area border color based on variant color
   // white garment => black border; black garment => white border
-  const printStrokeOuter = color === "white" ? "rgba(0,0,0,0.75)" : "rgba(255,255,255,0.85)";
-  const printStrokeInner = color === "white" ? "rgba(0,0,0,0.35)" : "rgba(255,255,255,0.35)";
+  const printStrokeOuter =
+    color === "white" ? "rgba(0,0,0,0.75)" : "rgba(255,255,255,0.85)";
+  const printStrokeInner =
+    color === "white" ? "rgba(0,0,0,0.35)" : "rgba(255,255,255,0.35)";
 
   // Initialize design position when loaded OR when we switch area/mockup
   useEffect(() => {
@@ -90,7 +105,7 @@ export default function ProductStage({
     node.scaleY(1);
     node.rotation(0);
 
-    node.x(printPx.x + (printPx.w - startW) / 2);
+    node.x(printPx.x + (printPx.w - startW) / 2 - printPx.w * 0.35); // 👈 left
     node.y(printPx.y + (printPx.h - startH) / 2);
 
     node.getLayer()?.batchDraw();
@@ -98,13 +113,27 @@ export default function ProductStage({
     onDesignTransformChange({
       x: node.x(),
       y: node.y(),
+      width: node.width(),
+      height: node.height(),
+
+      nx: (node.x() - printPx.x) / printPx.w,
+      ny: (node.y() - printPx.y) / printPx.h,
+      nw: node.width() / printPx.w,
+      nh: node.height() / printPx.h,
+
       scaleX: node.scaleX(),
       scaleY: node.scaleY(),
       rotation: node.rotation(),
-      width: node.width(),
-      height: node.height(),
     });
-  }, [designImg, mockupSrc, printPx.x, printPx.y, printPx.w, printPx.h, onDesignTransformChange]);
+  }, [
+    designImg,
+    mockupSrc,
+    printPx.x,
+    printPx.y,
+    printPx.w,
+    printPx.h,
+    onDesignTransformChange,
+  ]);
 
   // Attach transformer
   useEffect(() => {
@@ -143,12 +172,19 @@ export default function ProductStage({
     onDesignTransformChange({
       x: node.x(),
       y: node.y(),
+      width: node.width(),
+      height: node.height(),
+
+      nx: (node.x() - printPx.x) / printPx.w,
+      ny: (node.y() - printPx.y) / printPx.h,
+      nw: node.width() / printPx.w,
+      nh: node.height() / printPx.h,
+
       scaleX: node.scaleX(),
       scaleY: node.scaleY(),
       rotation: node.rotation(),
-      width: node.width(),
-      height: node.height(),
     });
+
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [snapToCenterSignal]);
 
@@ -173,12 +209,19 @@ export default function ProductStage({
     onDesignTransformChange({
       x: node.x(),
       y: node.y(),
+      width: node.width(),
+      height: node.height(),
+
+      nx: (node.x() - printPx.x) / printPx.w,
+      ny: (node.y() - printPx.y) / printPx.h,
+      nw: node.width() / printPx.w,
+      nh: node.height() / printPx.h,
+
       scaleX: node.scaleX(),
       scaleY: node.scaleY(),
       rotation: node.rotation(),
-      width: node.width(),
-      height: node.height(),
     });
+
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [resetSignal]);
 
@@ -197,17 +240,28 @@ export default function ProductStage({
     if (!designRef.current) return;
     const node = designRef.current;
 
+    const pa = printPx; // print area in px
+
     onDesignTransformChange({
+      // px
       x: node.x(),
       y: node.y(),
+      width: node.width(),
+      height: node.height(),
+
+      // normalized relative to print area
+      nx: (node.x() - pa.x) / pa.w,
+      ny: (node.y() - pa.y) / pa.h,
+      nw: node.width() / pa.w,
+      nh: node.height() / pa.h,
+
       scaleX: node.scaleX(),
       scaleY: node.scaleY(),
       rotation: node.rotation(),
-      width: node.width(),
-      height: node.height(),
     });
   };
-
+  
+  
   const limitScale = () => {
     if (!designRef.current) return;
     const node = designRef.current;
@@ -253,7 +307,7 @@ export default function ProductStage({
                   y={printPx.y}
                   width={printPx.w}
                   height={printPx.h}
-                  stroke={printStrokeOuter} 
+                  stroke={printStrokeOuter}
                   dash={[10, 8]}
                   cornerRadius={12}
                   listening={false}
@@ -263,7 +317,7 @@ export default function ProductStage({
                   y={printPx.y + 10}
                   width={Math.max(0, printPx.w - 20)}
                   height={Math.max(0, printPx.h - 20)}
-                  stroke={printStrokeInner} 
+                  stroke={printStrokeInner}
                   dash={[6, 10]}
                   cornerRadius={10}
                   listening={false}
@@ -298,7 +352,12 @@ export default function ProductStage({
             <Transformer
               ref={trRef}
               rotateEnabled
-              enabledAnchors={["top-left", "top-right", "bottom-left", "bottom-right"]}
+              enabledAnchors={[
+                "top-left",
+                "top-right",
+                "bottom-left",
+                "bottom-right",
+              ]}
               keepRatio
               boundBoxFunc={(oldBox, newBox) => {
                 if (newBox.width < 40 || newBox.height < 40) return oldBox;

@@ -2970,7 +2970,7 @@ react-is@^16.13.1:
 
 react-konva@^19.2.1:
   version "19.2.1"
-  resolved "https://registry.npmjs.org/react-konva/-/react-konva-19.2.1.tgz"
+  resolved "https://registry.yarnpkg.com/react-konva/-/react-konva-19.2.1.tgz#a8009c884d29ad5806adcc99ca83804e13f5ef76"
   integrity sha512-sqZWCzQGpdMrU5aeunR0oxUY8UeCPbU8gnAYxMtAn6BT4coeSpiATKOctsoxRu6F56TAcF+s0c6Lul9ansNqQA==
   dependencies:
     "@types/react-reconciler" "^0.32.3"

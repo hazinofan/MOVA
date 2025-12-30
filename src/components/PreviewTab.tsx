@@ -3,14 +3,14 @@
 import React, { useEffect, useMemo, useRef, useState } from "react";
 import useImage from "use-image";
 import { Stage, Layer, Image as KImage, Group } from "react-konva";
-import type {
-  ProductColor,
-  PrintArea as ProductPrintArea,
-} from "@/lib/products";
+import type { ProductColor, PrintArea as ProductPrintArea } from "@/lib/products";
 
 /** Rect in 0..1 coordinates */
 type Rect01 = { x: number; y: number; w: number; h: number };
 
+type DesignLayer = { id: string; src: string; name?: string };
+
+// normalized relative to SOURCE print area (front/back)
 export type NormalizedTransform = {
   nx: number;
   ny: number;
@@ -94,8 +94,11 @@ export function PreviewTab({
   activeViewId,
   onChangeViewId,
   color,
-  designByArea,
+
+  // ✅ NEW
+  designLayersByArea,
   transformByArea,
+
   stageSize,
   sourcePrintAreaBySide,
 }: {
@@ -103,8 +106,11 @@ export function PreviewTab({
   activeViewId?: string;
   onChangeViewId?: (id: string) => void;
   color: ProductColor;
-  designByArea: Record<string, string | null>;
-  transformByArea: Record<string, NormalizedTransform | null>;
+
+  // ✅ multi-layer inputs
+  designLayersByArea: Record<string, DesignLayer[]>;
+  transformByArea: Record<string, Record<string, NormalizedTransform>>;
+
   stageSize: { w: number; h: number };
   sourcePrintAreaBySide?: Partial<Record<"front" | "back", Rect01>>;
 }) {
@@ -126,8 +132,12 @@ export function PreviewTab({
   );
 
   const sourceSide: "front" | "back" = (active?.sourceAreaId ?? "front") as any;
-  const designSrc = designByArea?.[sourceSide] ?? null;
-  const transform = transformByArea?.[sourceSide] ?? null;
+
+  // ✅ get all layers for that side
+  const layers = designLayersByArea?.[sourceSide] ?? [];
+
+  // ✅ transforms for that side: designId -> transform
+  const transformsById = transformByArea?.[sourceSide] ?? {};
 
   // fit stage to available space
   const viewportRef = useRef<HTMLDivElement | null>(null);
@@ -165,11 +175,11 @@ export function PreviewTab({
           className="will-change-transform"
         >
           <BigMockupStage
-            key={`${active.id}-${color}`}
+            key={`${active.id}-${color}-${layers.length}`}
             view={active}
             color={color}
-            designSrc={designSrc}
-            transform={transform}
+            layers={layers}
+            transformsById={transformsById}
             stageSize={stageSize}
             sourcePrintAreaBySide={sourcePrintAreaBySide}
           />
@@ -182,15 +192,15 @@ export function PreviewTab({
 function BigMockupStage({
   view,
   color,
-  designSrc,
-  transform,
+  layers,
+  transformsById,
   stageSize,
   sourcePrintAreaBySide,
 }: {
   view: MockupView;
   color: ProductColor;
-  designSrc: string | null;
-  transform: NormalizedTransform | null;
+  layers: DesignLayer[];
+  transformsById: Record<string, NormalizedTransform>;
   stageSize: { w: number; h: number };
   sourcePrintAreaBySide?: Partial<Record<"front" | "back", Rect01>>;
 }) {
@@ -199,7 +209,13 @@ function BigMockupStage({
     [view.mockup, color]
   );
   const [mockupImg] = useImage(mockupSrc, "anonymous");
-  const [designImg] = useImage(designSrc ?? "", "anonymous");
+
+  // ⚠️ Same note as ProductStage: hooks inside map.
+  // If you want hook-safe structure, I can give a child component version.
+  const layerImgs = layers.map((l) => ({
+    id: l.id,
+    img: useImage(l.src ?? "", "anonymous")[0] as HTMLImageElement | undefined,
+  }));
 
   const frame = view.frame ?? { x: 0, y: 0, w: 1, h: 1 };
   const fitMode = view.fit ?? "contain";
@@ -243,47 +259,13 @@ function BigMockupStage({
 
   const scaleFix = view.designScale ?? 1;
   const opacity = view.designOpacity ?? 0.95;
-  const blend =
-  view.blendMode ??
-  (color === "black" ? "source-over" : "multiply");
-
+  const blend = view.blendMode ?? (color === "black" ? "source-over" : "multiply");
 
   const sourceSide: "front" | "back" = (view.sourceAreaId ?? "front") as any;
   const srcPA01 = useMemo(
     () => sourcePrintAreaBySide?.[sourceSide] ?? dstPA01,
     [sourcePrintAreaBySide, sourceSide, dstPA01]
   );
-
-  const tMapped = useMemo<NormalizedTransform | null>(() => {
-    if (!transform) return null;
-
-    const same =
-      srcPA01.x === dstPA01.x &&
-      srcPA01.y === dstPA01.y &&
-      srcPA01.w === dstPA01.w &&
-      srcPA01.h === dstPA01.h;
-
-    return same
-      ? transform
-      : mapTransformBetweenPrintAreas(transform, srcPA01, dstPA01);
-  }, [transform, srcPA01, dstPA01]);
-
-  const placement = useMemo(() => {
-    if (!tMapped || !designImg) return null;
-
-    const adj = view.previewAdjust ?? {};
-    const dx = adj.dx ?? 0;
-    const dy = adj.dy ?? 0;
-    const s = adj.s ?? 1;
-
-    const x = dstPAPx.x + (tMapped.nx + dx) * dstPAPx.w;
-    const y = dstPAPx.y + (tMapped.ny + dy) * dstPAPx.h;
-
-    const w = tMapped.nw * dstPAPx.w * scaleFix * s * (tMapped.scaleX ?? 1);
-    const h = tMapped.nh * dstPAPx.h * scaleFix * s * (tMapped.scaleY ?? 1);
-
-    return { x, y, w, h };
-  }, [tMapped, designImg, dstPAPx, scaleFix]);
 
   const clip = useMemo(
     () => ({ x: dstPAPx.x, y: dstPAPx.y, w: dstPAPx.w, h: dstPAPx.h }),
@@ -311,19 +293,46 @@ function BigMockupStage({
           clipHeight={clip.h}
           listening={false}
         >
-          {designImg && placement && (
-            <KImage
-              image={designImg}
-              x={placement.x}
-              y={placement.y}
-              width={placement.w}
-              height={placement.h}
-              rotation={tMapped?.rotation ?? 0}
-              opacity={opacity}
-              globalCompositeOperation={blend}
-              listening={false}
-            />
-          )}
+          {layers.map((layer) => {
+            const t = transformsById[layer.id];
+            const img = layerImgs.find((x) => x.id === layer.id)?.img;
+
+            if (!img || !t) return null;
+
+            const same =
+              srcPA01.x === dstPA01.x &&
+              srcPA01.y === dstPA01.y &&
+              srcPA01.w === dstPA01.w &&
+              srcPA01.h === dstPA01.h;
+
+            const tMapped = same ? t : mapTransformBetweenPrintAreas(t, srcPA01, dstPA01);
+
+            const adj = view.previewAdjust ?? {};
+            const dx = adj.dx ?? 0;
+            const dy = adj.dy ?? 0;
+            const s = adj.s ?? 1;
+
+            const x = dstPAPx.x + (tMapped.nx + dx) * dstPAPx.w;
+            const y = dstPAPx.y + (tMapped.ny + dy) * dstPAPx.h;
+
+            const w = tMapped.nw * dstPAPx.w * scaleFix * s;
+            const h = tMapped.nh * dstPAPx.h * scaleFix * s;
+
+            return (
+              <KImage
+                key={layer.id}
+                image={img}
+                x={x}
+                y={y}
+                width={w}
+                height={h}
+                rotation={tMapped.rotation ?? 0}
+                opacity={opacity}
+                globalCompositeOperation={blend}
+                listening={false}
+              />
+            );
+          })}
         </Group>
       </Layer>
     </Stage>

@@ -20,7 +20,7 @@ type Feature = {
 };
 
 type Cat = {
-    key: "best" | "hoodies" | "tshirts";
+    key: "best" | "hoodies" | "tshirts" | 'cups';
     labelTop: string;
     title: string;
     subtitle: string;
@@ -122,25 +122,25 @@ export default function CreativePage() {
             subtitle: "Top picks this week",
             href: "",
             accent: "peach",
-            imageSrc: "/featured/tshirt-feature.webp",
+            imageSrc: "/mockups/hoodies.webp",
         },
         {
-            key: "hoodies",
+            key: "cups",
             labelTop: "[CATEGORY 01]",
-            title: "Hoodies",
-            subtitle: "Oversized, heavy, clean",
-            href: "/shop/hoodies",
+            title: "Cups",
+            subtitle: "Clean, round, clear",
+            href: "",
             accent: "blue",
-            imageSrc: "/featured/hoodie-feature.webp",
+            imageSrc: "/mockups/cups.webp",
         },
         {
             key: "tshirts",
             labelTop: "[CATEGORY 02]",
             title: "T-Shirts",
             subtitle: "Everyday staples",
-            href: "/shop/tshirts",
+            href: "",
             accent: "black",
-            imageSrc: "/featured/cap.webp",
+            imageSrc: "/mockups/tshirt.webp",
         },
     ];
 
@@ -456,7 +456,7 @@ export default function CreativePage() {
                                         </div>
 
                                         {/* CTA */}
-                                        <div className="mt-6 grid gap-3">
+                                        {/* <div className="mt-6 grid gap-3">
                                             <Link
                                                 href="/studio"
                                                 className="group inline-flex w-full items-center justify-center rounded-full bg-black px-7 py-4 text-base font-semibold text-white shadow-sm transition hover:bg-black/90"
@@ -464,7 +464,7 @@ export default function CreativePage() {
                                                 Create now
                                                 <span className="ml-2 transition group-hover:translate-x-0.5">→</span>
                                             </Link>
-                                        </div>
+                                        </div> */}
                                     </div>
                                 </div>
                             </div>

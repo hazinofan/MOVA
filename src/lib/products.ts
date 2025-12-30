@@ -67,7 +67,6 @@ export type ProductConfig = {
   label: string;
   colors: ProductColor[];
   areas: AreaConfig[];
-  // ✅ NEW: preview-only thumbnails/views (does not affect editor logic)
   views?: ProductView[];
 };
 
@@ -83,8 +82,8 @@ export const PRODUCTS: ProductConfig[] = [
         id: "front",
         label: "Front side",
         printArea: {
-          white: { x: 0.28, y: 0.28, w: 0.44, h: 0.5 },
-          black: { x: 0.25, y: 0.14, w: 0.5, h: 0.7 },
+          white: { x: 0.25, y: 0.30, w: 0.50, h: 0.5 },
+          black: { x: 0.26, y: 0.25, w: 0.5, h: 0.6 },
         },
         mockup: (c) => `/studio/tshirt-front-${c}.png`,
       },
@@ -92,8 +91,8 @@ export const PRODUCTS: ProductConfig[] = [
         id: "back",
         label: "Back side",
         printArea: {
-          white: { x: 0.3, y: 0.22, w: 0.4, h: 0.55 },
-          black: { x: 0.27, y: 0.2, w: 0.48, h: 0.64 },
+          white: { x: 0.27, y: 0.27, w: 0.45, h: 0.55 },
+          black: { x: 0.26, y: 0.25, w: 0.48, h: 0.54 },
         },
         mockup: (c) => `/studio/tshirt-back-${c}.png`,
       },
@@ -155,7 +154,7 @@ export const PRODUCTS: ProductConfig[] = [
         mockup: (c) => `/studio/tshirt-back-${c}.png`,
         sourceAreaId: "back",
 
-        frame: { x: 0.12, y: 0.06, w: 1, h: 0.7 },
+        frame: { x: 0, y: 0.15, w: 1, h: 0.7 },
         printArea: { x: 0.27, y: 0.18, w: 0.46, h: 0.6 },
 
         previewAdjust: {

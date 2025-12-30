@@ -11,6 +11,8 @@ import {
 } from "@/lib/products";
 import { downloadBlob, downloadJSON } from "@/lib/export";
 import { PreviewTab } from "./PreviewTab";
+import { MoveLeft } from "lucide-react";
+import Link from "next/link";
 
 type Transform = {
   nx: number; // 0..1 relative to printArea
@@ -21,6 +23,14 @@ type Transform = {
   scaleY: number;
   rotation: number;
 };
+
+type DesignLayer = {
+  id: string;
+  src: string;
+  name?: string;
+};
+
+type TransformByDesign = Record<string, Transform>;
 
 type NormalizedTransform = {
   nx: number;
@@ -114,14 +124,23 @@ export default function StudioShell({ productId }: { productId: ProductType }) {
   const subtle = isDark ? "text-white/60" : "text-neutral-500";
 
   // per-area design (Printify style)
-  const [designByArea, setDesignByArea] = useState<
+  const [designLayersByArea, setDesignLayersByArea] = useState<
+    Record<string, DesignLayer[]>
+  >({});
+
+  const layers = designLayersByArea[areaId] ?? [];
+
+  const [activeDesignIdByArea, setActiveDesignIdByArea] = useState<
     Record<string, string | null>
   >({});
-  const designSrc = designByArea[areaId] ?? null;
 
-  function setAreaDesign(src: string | null) {
-    setDesignByArea((prev) => ({ ...prev, [areaId]: src }));
+  const hasAnyDesign = layers.length > 0;
+  const activeDesignId = activeDesignIdByArea[areaId] ?? (layers[0]?.id ?? null);
+
+  function setActiveDesignId(id: string | null) {
+    setActiveDesignIdByArea((prev) => ({ ...prev, [areaId]: id }));
   }
+
 
   const onViewportWheel = useCallback((e: React.WheelEvent) => {
     // stop page from scrolling
@@ -139,9 +158,12 @@ export default function StudioShell({ productId }: { productId: ProductType }) {
 
   // per-area transforms (each area remembers its position/scale)
   const [transformByArea, setTransformByArea] = useState<
-    Record<string, Transform | null>
+    Record<string, TransformByDesign>
   >({});
-  const currentTransform = transformByArea[areaId] ?? null;
+
+  const transformsForArea = transformByArea[areaId] ?? {};
+  const currentTransform = activeDesignId ? transformsForArea[activeDesignId] ?? null : null;
+
 
   const stageRef = useRef<Konva.Stage | null>(null);
 
@@ -252,11 +274,18 @@ export default function StudioShell({ productId }: { productId: ProductType }) {
   }, [product]);
 
   const handleDesignTransformChange = useCallback(
-    (t: Transform) => {
-      setTransformByArea((prev) => ({ ...prev, [areaId]: t }));
+    (designId: string, t: Transform) => {
+      setTransformByArea((prev) => ({
+        ...prev,
+        [areaId]: {
+          ...(prev[areaId] ?? {}),
+          [designId]: t,
+        },
+      }));
     },
     [areaId]
   );
+
 
   function onUpload(file: File) {
     if (
@@ -268,21 +297,29 @@ export default function StudioShell({ productId }: { productId: ProductType }) {
       alert("Upload PNG, SVG, JPG, or JPEG");
       return;
     }
+
     const reader = new FileReader();
-    reader.onload = () => setAreaDesign(String(reader.result));
+    reader.onload = () => {
+      const src = String(reader.result);
+      const id = crypto.randomUUID?.() ?? `${Date.now()}-${Math.random()}`;
+
+      const layer: DesignLayer = {
+        id,
+        src,
+        name: file.name,
+      };
+
+      setDesignLayersByArea((prev) => ({
+        ...prev,
+        [areaId]: [...(prev[areaId] ?? []), layer],
+      }));
+
+      // make the new one selected (so Transformer attaches)
+      setActiveDesignId(id);
+    };
     reader.readAsDataURL(file);
   }
 
-  function applyToAllAreas() {
-    const src = designByArea[areaId];
-    if (!src) return;
-
-    setDesignByArea((prev) => ({
-      ...prev,
-      front: src,
-      back: src,
-    }));
-  }
 
   const STUDIO_H = "h-[calc(100vh-100px)]";
 
@@ -319,13 +356,13 @@ export default function StudioShell({ productId }: { productId: ProductType }) {
   );
 
   const refreshPreview = useCallback(() => {
-    if (!designSrc) {
+    if (!hasAnyDesign) {
       setExportPreviewSrc(null);
       return;
     }
-    const url = buildPrintDataUrl(2); // crisp but fast
+    const url = buildPrintDataUrl(2);
     setExportPreviewSrc(url);
-  }, [buildPrintDataUrl, designSrc]);
+  }, [buildPrintDataUrl, hasAnyDesign]);
 
   // keep preview in sync with edits
   useEffect(() => {
@@ -338,8 +375,9 @@ export default function StudioShell({ productId }: { productId: ProductType }) {
     snapSignal,
     resetSignal,
     showPrintArea,
-    currentTransform,
-    designSrc,
+    activeDesignId,
+    layers,
+    transformsForArea,
   ]);
 
   async function exportPrintPNG() {
@@ -352,7 +390,8 @@ export default function StudioShell({ productId }: { productId: ProductType }) {
   }
 
   function exportJSON() {
-    if (!designSrc || !currentTransform) return;
+    const areaLayers = designLayersByArea[areaId] ?? [];
+    if (!areaLayers.length) return;
 
     downloadJSON(
       {
@@ -360,13 +399,14 @@ export default function StudioShell({ productId }: { productId: ProductType }) {
         area: areaId,
         color,
         stage: stageSize,
-        transform: currentTransform,
-        designSrc,
+        layers: areaLayers,
+        transforms: transformByArea[areaId] ?? {},
         createdAt: new Date().toISOString(),
       },
       `mova-${productId}-${areaId}-${color}-meta.json`
     );
   }
+
 
   // When switching to Preview, try to match the preview view with the current area
   useEffect(() => {
@@ -385,7 +425,8 @@ export default function StudioShell({ productId }: { productId: ProductType }) {
   useEffect(() => {
     if (tab !== "preview") return;
     setPreviewRenderTick((t) => t + 1);
-  }, [tab, color, designSrc, currentTransform]);
+  }, [tab, color, layers, transformsForArea]);
+
 
   const buildMockupPreviewDataUrl = useCallback((pixelRatio: number) => {
     const stage = previewStageRef.current;
@@ -399,16 +440,37 @@ export default function StudioShell({ productId }: { productId: ProductType }) {
     });
   }, []);
 
+  function applyToAllAreas() {
+    const srcLayers = designLayersByArea[areaId] ?? [];
+    if (!srcLayers.length) return;
+
+    setDesignLayersByArea((prev) => ({
+      ...prev,
+      front: srcLayers,
+      back: srcLayers,
+    }));
+
+    // also copy transforms so it looks identical
+    const srcTransforms = transformByArea[areaId] ?? {};
+    setTransformByArea((prev) => ({
+      ...prev,
+      front: srcTransforms,
+      back: srcTransforms,
+    }));
+  }
+
+
   const [previewRenderTick, setPreviewRenderTick] = useState(0);
 
   useEffect(() => {
-    if (!designSrc) {
+    if (!hasAnyDesign) {
       setExportPreviewSrc(null);
       return;
     }
     const url = buildMockupPreviewDataUrl(2);
     setExportPreviewSrc(url);
-  }, [previewRenderTick, buildMockupPreviewDataUrl, designSrc]);
+  }, [previewRenderTick, buildMockupPreviewDataUrl, hasAnyDesign]);
+
 
   return (
     <div className={`min-h-[calc(107vh-64px)] ${pageBg}`}>
@@ -420,13 +482,15 @@ export default function StudioShell({ productId }: { productId: ProductType }) {
           {/* Top bar */}
           <div className="flex items-center justify-between gap-3 px-5 py-2 border-b border-gray-300">
             <div className="flex items-center gap-3">
-              <button className="h-10 rounded-xl border ${divider} ${panelBg} ${hoverBg} px-3 text-sm hover:bg-black/[0.03]">
-                ←
-              </button>
+              <Link href='/creative' >
+                <button className="h-10 rounded-xl cursor-pointer border ${divider} ${panelBg} ${hoverBg} px-3 text-sm hover:bg-black/[0.03]">
+                  <MoveLeft />
+                </button>
+              </Link>
 
               <div className="flex flex-col leading-tight">
-                <div className="text-base font-semibold">New product #1</div>
-                <div className="text-xs text-neutral-500">MOVA Studio</div>
+                <div className="text-base font-semibold">My New Product</div>
+                <div className="text-xs text-neutral-500 font-druk">MOVA Studio</div>
               </div>
             </div>
 
@@ -442,8 +506,8 @@ export default function StudioShell({ productId }: { productId: ProductType }) {
                     tab === "customize"
                       ? "bg-black text-white"
                       : isDark
-                      ? "text-white/70 hover:bg-white/[0.06]"
-                      : "text-neutral-700 hover:bg-black/[0.04]",
+                        ? "text-white/70 hover:bg-white/[0.06]"
+                        : "text-neutral-700 hover:bg-black/[0.04]",
                   ].join(" ")}
                 >
                   Customize
@@ -451,14 +515,14 @@ export default function StudioShell({ productId }: { productId: ProductType }) {
 
                 <button
                   onClick={() => setTab("preview")}
-                  disabled={!designSrc}
+                  disabled={!hasAnyDesign}
                   className={[
                     "h-9 rounded-lg px-3 text-base font-druk transition cursor-pointer disabled:opacity-40",
                     tab === "preview"
                       ? "bg-black text-white"
                       : isDark
-                      ? "text-white/70 hover:bg-white/[0.06]"
-                      : "text-neutral-700 hover:bg-black/[0.04]",
+                        ? "text-white/70 hover:bg-white/[0.06]"
+                        : "text-neutral-700 hover:bg-black/[0.04]",
                   ].join(" ")}
                 >
                   Preview
@@ -536,19 +600,37 @@ export default function StudioShell({ productId }: { productId: ProductType }) {
                       />
                     </label>
 
-                    <div className="mt-3 flex flex-wrap gap-2">
+                    <div className="mt-3 flex flex-wrap gap-2 w-full justify-center">
                       <button
                         onClick={applyToAllAreas}
-                        disabled={!designSrc}
-                        className={`h-10 rounded-xl border px-3 text-sm disabled:opacity-40 ${sidebar.btnIdle}`}
+                        disabled={!hasAnyDesign}
+                        className={`h-10 rounded-xl border px-3 cursor-pointer text-sm disabled:opacity-40 ${sidebar.btnIdle}`}
                       >
                         Apply to all
                       </button>
 
                       <button
-                        onClick={() => setAreaDesign(null)}
-                        disabled={!designSrc}
-                        className={`h-10 rounded-xl border px-3 text-sm disabled:opacity-40 ${sidebar.btnIdle}`}
+                        onClick={() => {
+                          if (!activeDesignId) return;
+
+                          setDesignLayersByArea((prev) => {
+                            const next = (prev[areaId] ?? []).filter((l) => l.id !== activeDesignId);
+                            return { ...prev, [areaId]: next };
+                          });
+
+                          setTransformByArea((prev) => {
+                            const copy = { ...(prev[areaId] ?? {}) };
+                            delete copy[activeDesignId];
+                            return { ...prev, [areaId]: copy };
+                          });
+
+                          // pick another active layer if exists
+                          const nextActive = (layers.filter(l => l.id !== activeDesignId)[0]?.id) ?? null;
+                          setActiveDesignId(nextActive);
+                        }}
+                        disabled={!activeDesignId}
+
+                        className={`h-10 rounded-xl border px-3 text-sm disabled:opacity-40 bg-red-500/50 hover:bg-red-600/50 cursor-pointer`}
                       >
                         Remove
                       </button>
@@ -653,8 +735,8 @@ export default function StudioShell({ productId }: { productId: ProductType }) {
                                 ? "bg-white border-white/30"
                                 : "bg-white border-black/20"
                               : isDark
-                              ? "bg-black border-white/20"
-                              : "bg-black border-black/20";
+                                ? "bg-black border-white/20"
+                                : "bg-black border-black/20";
 
                           return (
                             <button
@@ -693,7 +775,7 @@ export default function StudioShell({ productId }: { productId: ProductType }) {
 
                         <button
                           onClick={() => setSnapSignal((v) => v + 1)}
-                          disabled={!designSrc}
+                          disabled={!hasAnyDesign}
                           className={`h-10 rounded-xl border cursor-pointer text-sm disabled:opacity-40 ${sidebar.btnIdle}`}
                         >
                           Center
@@ -701,7 +783,7 @@ export default function StudioShell({ productId }: { productId: ProductType }) {
 
                         <button
                           onClick={() => setResetSignal((v) => v + 1)}
-                          disabled={!designSrc}
+                          disabled={!hasAnyDesign}
                           className={`h-10 rounded-xl cursor-pointer bg-gray-700 border text-sm disabled:opacity-40 col-span-2 ${sidebar.btnIdle}`}
                         >
                           Reset
@@ -716,9 +798,8 @@ export default function StudioShell({ productId }: { productId: ProductType }) {
             {/* MIDDLE PANEL */}
             {tab === "customize" ? (
               <main
-                className={`relative h-full overflow-hidden ${
-                  isDark ? "bg-neutral-950" : "bg-neutral-50"
-                }`}
+                className={`relative h-full overflow-hidden ${isDark ? "bg-neutral-950" : "bg-neutral-50"
+                  }`}
               >
                 {/* top row */}
                 <div className="mx-auto max-w-3xl pt-5 px-4"></div>
@@ -748,20 +829,20 @@ export default function StudioShell({ productId }: { productId: ProductType }) {
                             <ProductStage
                               product={product}
                               mockupSrc={mockupSrc}
-                              printArea={
-                                area?.printArea?.[color] ?? area?.printArea
-                              }
-                              designSrc={designSrc}
+                              printArea={area?.printArea?.[color] ?? area?.printArea}
+                              designLayers={layers}
+                              activeDesignId={activeDesignId}
+                              onSelectDesign={setActiveDesignId}
+                              transformByDesignId={transformsForArea}
                               color={color}
                               stageSize={stageSize}
                               showPrintArea={showPrintArea}
                               snapToCenterSignal={snapSignal}
                               resetSignal={resetSignal}
                               onStageRef={(s) => (stageRef.current = s)}
-                              onDesignTransformChange={
-                                handleDesignTransformChange
-                              }
+                              onDesignTransformChange={handleDesignTransformChange}
                             />
+
                           </div>
                         </div>
                       </div>
@@ -772,7 +853,7 @@ export default function StudioShell({ productId }: { productId: ProductType }) {
                       <PreviewTab
                         views={previewViews}
                         color={color}
-                        designByArea={designByArea}
+                        designLayersByArea={designLayersByArea}
                         transformByArea={transformByArea}
                         stageSize={stageSize}
                         sourcePrintAreaBySide={{
@@ -805,6 +886,31 @@ export default function StudioShell({ productId }: { productId: ProductType }) {
                     >
                       Fit
                     </button>
+                    <button
+                      onClick={() => {
+                        if (!activeDesignId) return;
+
+                        setDesignLayersByArea((prev) => {
+                          const next = (prev[areaId] ?? []).filter((l) => l.id !== activeDesignId);
+                          return { ...prev, [areaId]: next };
+                        });
+
+                        setTransformByArea((prev) => {
+                          const copy = { ...(prev[areaId] ?? {}) };
+                          delete copy[activeDesignId];
+                          return { ...prev, [areaId]: copy };
+                        });
+
+                        // pick another active layer if exists
+                        const nextActive = (layers.filter(l => l.id !== activeDesignId)[0]?.id) ?? null;
+                        setActiveDesignId(nextActive);
+                      }}
+                      disabled={!activeDesignId}
+
+                      className={`h-10 rounded-xl border px-3 text-sm disabled:opacity-40 bg-red-700 hover:bg-red-800 text-white border-gray-400 cursor-pointer`}
+                    >
+                      Remove Design
+                    </button>
 
                     {tab === "customize" && (
                       <div className={subtle}>
@@ -817,9 +923,8 @@ export default function StudioShell({ productId }: { productId: ProductType }) {
             ) : (
               <>
                 <main
-                  className={`${
-                    isDark ? "bg-neutral-950" : "bg-neutral-50"
-                  } h-full overflow-hidden`}
+                  className={`${isDark ? "bg-neutral-950" : "bg-neutral-50"
+                    } h-full overflow-hidden`}
                 >
                   <div className="h-full p-6">
                     <div className="h-full rounded-3xl border border-black/10 bg-white overflow-hidden">
@@ -827,7 +932,7 @@ export default function StudioShell({ productId }: { productId: ProductType }) {
                         <PreviewTab
                           views={previewViews}
                           color={color}
-                          designByArea={designByArea}
+                          designLayersByArea={designLayersByArea}
                           transformByArea={transformByArea}
                           stageSize={stageSize}
                           sourcePrintAreaBySide={{
@@ -933,7 +1038,7 @@ function PreviewRightSidebar({
       </div>
 
       <div className="border-t border-black/10 pt-5">
-        <div className="text-base font-semibold">Mockup color</div>
+        {/* <div className="text-base font-semibold">Mockup color</div>
         <div className="mt-3 grid grid-cols-2 gap-3">
           {COLORS.map((c) => {
             const active = c.id === color;
@@ -963,7 +1068,7 @@ function PreviewRightSidebar({
               </button>
             );
           })}
-        </div>
+        </div> */}
 
         <div className="text-lg text-neutral-500 mt-10 text-center bg-yellow-50 p-3 rounded-lg border border-yellow-200">
           The actual products are much better quality than these mockups. this

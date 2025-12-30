@@ -6,19 +6,12 @@ import { Stage, Layer, Image as KImage, Rect, Transformer } from "react-konva";
 import type Konva from "konva";
 import type { ProductConfig, PrintArea, ProductColor } from "@/lib/products";
 
-type TransformPayload = {
-  // stage px values (good for saving exact current state)
-  x: number;
-  y: number;
-  width: number;
-  height: number;
-
-  // normalized relative to print area (good for previews)
-  nx: number;
+// This matches what StudioShell now uses for saving transforms
+type Transform = {
+  nx: number; // 0..1 relative to printArea
   ny: number;
   nw: number;
   nh: number;
-
   scaleX: number;
   scaleY: number;
   rotation: number;
@@ -26,17 +19,27 @@ type TransformPayload = {
 
 type Props = {
   product: ProductConfig;
+
+  // ✅ multiple layers
+  designLayers: { id: string; src: string }[];
+  activeDesignId: string | null;
+  onSelectDesign: (id: string | null) => void;
+
+  // ✅ per-design transforms
+  transformByDesignId: Record<string, Transform>;
+  onDesignTransformChange: (designId: string, t: Transform) => void;
+
   mockupSrc: string;
   printArea?: PrintArea;
-  designSrc: string | null;
-  onDesignTransformChange: (t: TransformPayload) => void;
   stageSize: { w: number; h: number };
   showPrintArea: boolean;
+
   snapToCenterSignal: number; // increment to trigger snap
   resetSignal: number; // increment to trigger reset
+
   onStageRef?: (stage: Konva.Stage | null) => void;
 
-  // ✅ NEW: needed to pick print area border color
+  // border color depends on garment color
   color: ProductColor;
 };
 
@@ -44,31 +47,66 @@ function clamp(v: number, min: number, max: number) {
   return Math.max(min, Math.min(max, v));
 }
 
+function fitRect(
+  imgW: number,
+  imgH: number,
+  target: { x: number; y: number; w: number; h: number },
+  mode: "contain" | "cover" = "contain"
+) {
+  const scale =
+    mode === "cover"
+      ? Math.max(target.w / imgW, target.h / imgH)
+      : Math.min(target.w / imgW, target.h / imgH);
+
+  const w = imgW * scale;
+  const h = imgH * scale;
+  const x = target.x + (target.w - w) / 2;
+  const y = target.y + (target.h - h) / 2;
+  return { x, y, w, h, scale };
+}
+
 export default function ProductStage({
   product,
   mockupSrc,
   printArea,
-  designSrc,
+  designLayers,
+  activeDesignId,
+  onSelectDesign,
+  transformByDesignId,
   onDesignTransformChange,
   stageSize,
   showPrintArea,
   snapToCenterSignal,
   resetSignal,
   onStageRef,
-  color, // ✅ NEW
+  color,
 }: Props) {
   const stageRef = useRef<Konva.Stage>(null);
-  const designRef = useRef<Konva.Image>(null);
   const trRef = useRef<Konva.Transformer>(null);
 
+  // Keep refs for each layer node
+  const nodeRefs = useRef<Record<string, Konva.Image | null>>({});
+
   const [mockupImg] = useImage(mockupSrc, "anonymous");
-  const [designImg] = useImage(designSrc ?? "", "anonymous");
 
   const pa = (printArea ?? { x: 0.33, y: 0.22, w: 0.34, h: 0.48 }) as {
     x: number;
     y: number;
     w: number;
     h: number;
+  };
+
+  const normalizeNodeScale = (designId: string) => {
+    const node = nodeRefs.current[designId];
+    if (!node) return;
+
+    const w = node.width() * node.scaleX();
+    const h = node.height() * node.scaleY();
+
+    node.width(w);
+    node.height(h);
+    node.scaleX(1);
+    node.scaleY(1);
   };
 
   const printPx = useMemo(() => {
@@ -81,21 +119,76 @@ export default function ProductStage({
     };
   }, [pa.x, pa.y, pa.w, pa.h, stageSize]);
 
-  // ✅ Print area border color based on variant color
-  // white garment => black border; black garment => white border
+  // Border color (white garment => dark border, black garment => light border)
   const printStrokeOuter =
     color === "white" ? "rgba(0,0,0,0.75)" : "rgba(255,255,255,0.85)";
   const printStrokeInner =
     color === "white" ? "rgba(0,0,0,0.35)" : "rgba(255,255,255,0.35)";
 
-  // Initialize design position when loaded OR when we switch area/mockup
-  useEffect(() => {
-    if (!designImg || !designRef.current) return;
+  const stageRect = { x: 0, y: 0, w: stageSize.w, h: stageSize.h };
+  const mockupDraw = mockupImg
+    ? fitRect(mockupImg.width, mockupImg.height, stageRect, "contain")
+    : { x: 0, y: 0, w: stageSize.w, h: stageSize.h };
 
-    const node = designRef.current;
+  const onUpdateCursor = (cursor: string) => {
+    const container = stageRef.current?.container();
+    if (container) container.style.cursor = cursor;
+  };
 
+  const emitTransform = (designId: string) => {
+    const node = nodeRefs.current[designId];
+    if (!node) return;
+
+    const paPx = printPx;
+
+    const wEff = node.width() * node.scaleX();
+    const hEff = node.height() * node.scaleY();
+
+    onDesignTransformChange(designId, {
+      nx: (node.x() - paPx.x) / paPx.w,
+      ny: (node.y() - paPx.y) / paPx.h,
+      nw: wEff / paPx.w,
+      nh: hEff / paPx.h,
+
+      scaleX: 1,
+      scaleY: 1,
+      rotation: node.rotation(),
+    });
+  };
+
+  const applyTransformToNode = (designId: string) => {
+    const node = nodeRefs.current[designId];
+    if (!node) return;
+
+    const t = transformByDesignId[designId];
+    if (!t) return;
+
+    node.x(printPx.x + t.nx * printPx.w);
+    node.y(printPx.y + t.ny * printPx.h);
+    node.width(t.nw * printPx.w);
+    node.height(t.nh * printPx.h);
+
+    node.scaleX(1);
+    node.scaleY(1);
+    node.rotation(t.rotation ?? 0);
+  };
+
+
+  const initNodeIfMissing = (designId: string, img: HTMLImageElement) => {
+    const node = nodeRefs.current[designId];
+    if (!node) return;
+
+    // If a transform exists, just apply it
+    const hasSaved = !!transformByDesignId[designId];
+    if (hasSaved) {
+      applyTransformToNode(designId);
+      node.getLayer()?.batchDraw();
+      return;
+    }
+
+    // Otherwise, initialize inside print area (left-ish like your current feel)
     const startW = Math.min(printPx.w * 0.55, 360);
-    const ratio = designImg.width / designImg.height || 1;
+    const ratio = img.width / img.height || 1;
     const startH = startW / ratio;
 
     node.width(startW);
@@ -105,49 +198,23 @@ export default function ProductStage({
     node.scaleY(1);
     node.rotation(0);
 
-    node.x(printPx.x + (printPx.w - startW) / 2 - printPx.w * 0.35); // 👈 left
+    node.x(printPx.x + (printPx.w - startW) / 2 - printPx.w * 0.35);
     node.y(printPx.y + (printPx.h - startH) / 2);
 
     node.getLayer()?.batchDraw();
+    emitTransform(designId);
+  };
 
-    onDesignTransformChange({
-      x: node.x(),
-      y: node.y(),
-      width: node.width(),
-      height: node.height(),
+  const limitScale = (designId: string) => {
+    const node = nodeRefs.current[designId];
+    if (!node) return;
 
-      nx: (node.x() - printPx.x) / printPx.w,
-      ny: (node.y() - printPx.y) / printPx.h,
-      nw: node.width() / printPx.w,
-      nh: node.height() / printPx.h,
+    const sx = clamp(node.scaleX(), 0.05, 10);
+    const sy = clamp(node.scaleY(), 0.05, 10);
 
-      scaleX: node.scaleX(),
-      scaleY: node.scaleY(),
-      rotation: node.rotation(),
-    });
-  }, [
-    designImg,
-    mockupSrc,
-    printPx.x,
-    printPx.y,
-    printPx.w,
-    printPx.h,
-    onDesignTransformChange,
-  ]);
-
-  // Attach transformer
-  useEffect(() => {
-    if (!trRef.current) return;
-
-    if (!designSrc || !designRef.current) {
-      trRef.current.nodes([]);
-      trRef.current.getLayer()?.batchDraw();
-      return;
-    }
-
-    trRef.current.nodes([designRef.current]);
-    trRef.current.getLayer()?.batchDraw();
-  }, [designSrc]);
+    node.scaleX(sx);
+    node.scaleY(sy);
+  };
 
   // Provide stage ref upward
   useEffect(() => {
@@ -155,10 +222,39 @@ export default function ProductStage({
     return () => onStageRef?.(null);
   }, [onStageRef]);
 
-  // Snap to center trigger (centers inside print area)
+  // Attach transformer to active node
   useEffect(() => {
-    if (!designRef.current) return;
-    const node = designRef.current;
+    const tr = trRef.current;
+    if (!tr) return;
+
+    const node = activeDesignId ? nodeRefs.current[activeDesignId] : null;
+
+    if (!node) {
+      tr.nodes([]);
+      tr.getLayer()?.batchDraw();
+      return;
+    }
+
+    tr.nodes([node]);
+    tr.getLayer()?.batchDraw();
+  }, [activeDesignId, designLayers.length]);
+
+  // When print area changes (switch side/color), re-apply saved transforms
+  useEffect(() => {
+    for (const layer of designLayers) {
+      if (transformByDesignId[layer.id]) {
+        applyTransformToNode(layer.id);
+      }
+    }
+    stageRef.current?.batchDraw();
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [printPx.x, printPx.y, printPx.w, printPx.h]);
+
+  // Snap to center (for active design)
+  useEffect(() => {
+    if (!activeDesignId) return;
+    const node = nodeRefs.current[activeDesignId];
+    if (!node) return;
 
     const bbox = node.getClientRect({ skipTransform: false });
     const targetX = printPx.x + (printPx.w - bbox.width) / 2;
@@ -168,30 +264,15 @@ export default function ProductStage({
     node.y(node.y() + (targetY - bbox.y));
 
     node.getLayer()?.batchDraw();
-
-    onDesignTransformChange({
-      x: node.x(),
-      y: node.y(),
-      width: node.width(),
-      height: node.height(),
-
-      nx: (node.x() - printPx.x) / printPx.w,
-      ny: (node.y() - printPx.y) / printPx.h,
-      nw: node.width() / printPx.w,
-      nh: node.height() / printPx.h,
-
-      scaleX: node.scaleX(),
-      scaleY: node.scaleY(),
-      rotation: node.rotation(),
-    });
-
+    emitTransform(activeDesignId);
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [snapToCenterSignal]);
 
-  // Reset trigger
+  // Reset (for active design)
   useEffect(() => {
-    if (!designRef.current) return;
-    const node = designRef.current;
+    if (!activeDesignId) return;
+    const node = nodeRefs.current[activeDesignId];
+    if (!node) return;
 
     node.scaleX(1);
     node.scaleY(1);
@@ -205,73 +286,9 @@ export default function ProductStage({
     node.y(node.y() + (targetY - bbox.y));
 
     node.getLayer()?.batchDraw();
-
-    onDesignTransformChange({
-      x: node.x(),
-      y: node.y(),
-      width: node.width(),
-      height: node.height(),
-
-      nx: (node.x() - printPx.x) / printPx.w,
-      ny: (node.y() - printPx.y) / printPx.h,
-      nw: node.width() / printPx.w,
-      nh: node.height() / printPx.h,
-
-      scaleX: node.scaleX(),
-      scaleY: node.scaleY(),
-      rotation: node.rotation(),
-    });
-
+    emitTransform(activeDesignId);
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [resetSignal]);
-
-  const onSelectDesign = () => {
-    if (!trRef.current || !designRef.current) return;
-    trRef.current.nodes([designRef.current]);
-    trRef.current.getLayer()?.batchDraw();
-  };
-
-  const onUpdateCursor = (cursor: string) => {
-    const container = stageRef.current?.container();
-    if (container) container.style.cursor = cursor;
-  };
-
-  const emitTransform = () => {
-    if (!designRef.current) return;
-    const node = designRef.current;
-
-    const pa = printPx; // print area in px
-
-    onDesignTransformChange({
-      // px
-      x: node.x(),
-      y: node.y(),
-      width: node.width(),
-      height: node.height(),
-
-      // normalized relative to print area
-      nx: (node.x() - pa.x) / pa.w,
-      ny: (node.y() - pa.y) / pa.h,
-      nw: node.width() / pa.w,
-      nh: node.height() / pa.h,
-
-      scaleX: node.scaleX(),
-      scaleY: node.scaleY(),
-      rotation: node.rotation(),
-    });
-  };
-  
-  
-  const limitScale = () => {
-    if (!designRef.current) return;
-    const node = designRef.current;
-
-    const sx = clamp(node.scaleX(), 0.05, 10);
-    const sy = clamp(node.scaleY(), 0.05, 10);
-
-    node.scaleX(sx);
-    node.scaleY(sy);
-  };
 
   return (
     <div className="relative w-full">
@@ -283,23 +300,23 @@ export default function ProductStage({
           className="w-full h-full rounded-2xl bg-neutral-950/40 ring-1 ring-white/10"
           onMouseDown={(e) => {
             const clickedOnEmpty = e.target === e.target.getStage();
-            if (clickedOnEmpty && trRef.current) trRef.current.nodes([]);
+            if (clickedOnEmpty) onSelectDesign(null);
           }}
         >
           <Layer>
-            {/* Mockup (cover full stage) */}
+            {/* Mockup */}
             {mockupImg && (
               <KImage
                 image={mockupImg}
-                x={0}
-                y={0}
-                width={stageSize.w}
-                height={stageSize.h}
+                x={mockupDraw.x}
+                y={mockupDraw.y}
+                width={mockupDraw.w}
+                height={mockupDraw.h}
                 listening={false}
               />
             )}
 
-            {/* Print area overlay (recommended zone) */}
+            {/* Print area overlay */}
             {showPrintArea && (
               <>
                 <Rect
@@ -325,29 +342,26 @@ export default function ProductStage({
               </>
             )}
 
-            {/* Design */}
-            {designImg && designSrc && (
-              <KImage
-                ref={designRef}
-                image={designImg}
-                draggable
-                onClick={onSelectDesign}
-                onTap={onSelectDesign}
-                onMouseEnter={() => onUpdateCursor("move")}
-                onMouseLeave={() => onUpdateCursor("default")}
-                onDragStart={() => onUpdateCursor("grabbing")}
-                onDragEnd={() => {
-                  onUpdateCursor("move");
-                  emitTransform();
+            {/* ✅ Designs (layers) */}
+            {designLayers.map((layer) => (
+              <DesignLayerNode
+                key={layer.id}
+                id={layer.id}
+                src={layer.src}
+                active={layer.id === activeDesignId}
+                onSelect={() => onSelectDesign(layer.id)}
+                registerNode={(id, node) => {
+                  nodeRefs.current[id] = node;
                 }}
-                onTransformStart={() => onUpdateCursor("nwse-resize")}
-                onTransformEnd={() => {
-                  onUpdateCursor("move");
-                  limitScale();
-                  emitTransform();
+                onInitIfMissing={initNodeIfMissing}
+                onDragEndEmit={(id) => emitTransform(id)}
+                onTransformEndEmit={(id) => {
+                  normalizeNodeScale(id);
+                  emitTransform(id);
                 }}
+                onCursor={onUpdateCursor}
               />
-            )}
+            ))}
 
             <Transformer
               ref={trRef}
@@ -370,5 +384,59 @@ export default function ProductStage({
         </Stage>
       </div>
     </div>
+  );
+}
+
+function DesignLayerNode({
+  id,
+  src,
+  active,
+  onSelect,
+  registerNode,
+  onInitIfMissing,
+  onDragEndEmit,
+  onTransformEndEmit,
+  onCursor,
+}: {
+  id: string;
+  src: string;
+  active: boolean;
+  onSelect: () => void;
+  registerNode: (id: string, node: Konva.Image | null) => void;
+  onInitIfMissing: (id: string, img: HTMLImageElement) => void;
+  onDragEndEmit: (id: string) => void;
+  onTransformEndEmit: (id: string) => void;
+  onCursor: (c: string) => void;
+}) {
+  const [img] = useImage(src ?? "", "anonymous");
+
+  useEffect(() => {
+    if (!img) return;
+    onInitIfMissing(id, img);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [img, id]);
+
+  if (!img) return null;
+
+  return (
+    <KImage
+      ref={(node) => registerNode(id, node)}
+      image={img}
+      draggable
+      onClick={onSelect}
+      onTap={onSelect}
+      onMouseEnter={() => onCursor("move")}
+      onMouseLeave={() => onCursor("default")}
+      onDragStart={() => onCursor("grabbing")}
+      onDragEnd={() => {
+        onCursor("move");
+        onDragEndEmit(id);
+      }}
+      onTransformStart={() => onCursor("nwse-resize")}
+      onTransformEnd={() => {
+        onCursor("move");
+        onTransformEndEmit(id);
+      }}
+    />
   );
 }

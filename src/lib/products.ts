@@ -9,6 +9,18 @@ export type AreaId =
 
 export type ProductType = "tshirt" | "hoodie" | "cap" | "cup";
 
+export type ProductFeature = {
+  id: string;
+  icon: "size" | "stitch" | "seamless" | "fabric" | "origin" | "material";
+  title: string;
+  description: string;
+};
+
+export type ProductDetails = {
+  about: string;
+  keyFeatures: ProductFeature[];
+};
+
 export type PreviewAdjust = {
   dx?: number;
   dy?: number;
@@ -61,14 +73,29 @@ export type ProductView = {
   previewAdjust?: PreviewAdjust;
 };
 
+export type MetricKey = "quality" | "price" | "shipping" | "delivery";
+
+export type ProductMetric = {
+  key: MetricKey;
+  title: string;
+  value: string;
+  sub?: string;
+  note?: string;
+};
+
 export type ProductConfig = {
   id: ProductType;
   thumbnail: string;
   label: string;
   colors: ProductColor[];
+  metrics?: ProductMetric[]
   areas: AreaConfig[];
   views?: ProductView[];
+
+  // ✅ NEW
+  details?: ProductDetails;
 };
+
 
 export const PRODUCTS: ProductConfig[] = [
   // -------------------- TSHIRT --------------------
@@ -77,6 +104,88 @@ export const PRODUCTS: ProductConfig[] = [
     label: "T-Shirt",
     thumbnail: "/studio/tshirt-front-black.png",
     colors: ["white", "black"],
+    metrics: [
+      {
+        key: "quality",
+        title: "Best quality",
+        value: "Top rated",
+        sub: "Fulfilled by a trusted provider, covered by our Quality Promise.",
+      },
+      {
+        key: "price",
+        title: "Lowest price",
+        value: "From USD 12.41",
+        sub: "From USD 10.72 with Premium",
+        note: "Get the best prices available in our network.",
+      },
+      {
+        key: "shipping",
+        title: "Most shipping options",
+        value: "From USD 3.99",
+        sub: "Economy or Standard shipping available.",
+      },
+      {
+        key: "delivery",
+        title: "Fastest delivery",
+        value: "1.6 days*",
+        sub: "Orders optimized for US customers.",
+        note: "* avg. production time",
+      },
+    ],
+
+
+    details: {
+      about: `Comfort Colors introduces the “Comfort Colors 1717” garment-dyed t-shirt; 
+              a fully customizable tee made with 100% ring-spun cotton. 
+              The soft-washed, garment-dyed fabric brings extra coziness to your wardrobe while 
+              the relaxed fit makes it an excellent daily choice. 
+              The double-needle stitching throughout the tee makes it highly durable, 
+              while the lack of side seams helps the shirt retain its tubular shape.`,
+
+      keyFeatures: [
+        {
+          id: "sizes",
+          icon: "size",
+          title: "S to 4XL",
+          description:
+            "Available in multiple sizes from S to 4XL (select partners) so customers can find the perfect fit.",
+        },
+        {
+          id: "stitching",
+          icon: "stitch",
+          title: "Double-needle stitching",
+          description:
+            "Sewn around the finished edges with double stitching for extra durability.",
+        },
+        {
+          id: "seamless",
+          icon: "seamless",
+          title: "Without side seams",
+          description:
+            "Tubular knit construction reduces fabric waste and helps the garment keep its shape.",
+        },
+        {
+          id: "fabric",
+          icon: "fabric",
+          title: "Garment-dyed fabric",
+          description:
+            "Dyed after construction, giving each shirt a soft texture and rich color.",
+        },
+        {
+          id: "origin",
+          icon: "origin",
+          title: "Country of origin",
+          description: "Made in Morocco.",
+        },
+        {
+          id: "material",
+          icon: "material",
+          title: "100% Cotton",
+          description:
+            "Made from 100% ring-spun US cotton for long-lasting comfort.",
+        },
+      ],
+    },
     areas: [
       {
         id: "front",

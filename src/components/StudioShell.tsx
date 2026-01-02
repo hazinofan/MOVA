@@ -3,16 +3,11 @@ import MockupPreviews, { type MockupView } from "./MockupPreviews";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import type Konva from "konva";
 import ProductStage from "./ProductStage";
-import {
-  PRODUCTS,
-  type ProductType,
-  type ProductColor,
-  getProduct,
-} from "@/lib/products";
 import { downloadBlob, downloadJSON } from "@/lib/export";
 import { PreviewTab } from "./PreviewTab";
 import { MoveLeft } from "lucide-react";
 import Link from "next/link";
+import type { ProductConfig, ProductColor } from "@/lib/products";
 
 type Transform = {
   nx: number; // 0..1 relative to printArea
@@ -53,8 +48,22 @@ const COLORS: { id: ProductColor; label: string }[] = [
 // UI constraint: show only these parts
 const UI_PARTS: AreaId[] = ["front", "back"];
 
-export default function StudioShell({ productId }: { productId: ProductType }) {
-  const product = useMemo(() => getProduct(productId), [productId]);
+export default function StudioShell({ product }: { product: ProductConfig }) {
+  const productId = product.id;
+  useEffect(() => {
+  console.log("🧠 StudioShell product", product);
+  console.log("🧱 areas mockup type sample", product.areas?.[0]?.id, typeof (product.areas?.[0] as any)?.mockup);
+  console.log("🖼️ views mockup type sample", product.views?.[0]?.id, typeof (product.views?.[0] as any)?.mockup);
+
+  // also check current computed mockupSrc (if area exists)
+  const a0: any = product.areas?.find((a: any) => a.id === "front") ?? product.areas?.[0];
+  try {
+    if (a0?.mockup) console.log("🧪 front mockup('white')", a0.mockup("white"));
+  } catch (e) {
+    console.error("💥 front mockup call failed", e);
+  }
+}, [product]);
+
   type StudioTab = "customize" | "preview";
   const [tab, setTab] = useState<StudioTab>("customize");
   const [areaId, setAreaId] = useState<AreaId>("front");
@@ -69,11 +78,11 @@ export default function StudioShell({ productId }: { productId: ProductType }) {
   useEffect(() => {
     const next = (product.views?.[0]?.id ?? "front") as string;
     setPreviewViewId(next);
-  }, [productId]);
+  }, [product]);
 
   const previewView = useMemo(() => {
     return (
-      (product.views ?? []).find((v) => v.id === previewViewId) ??
+      (product.views ?? []).find((v: any) => v.id === previewViewId) ??
       (product.views ?? [])[0]
     );
   }, [product, previewViewId]);
@@ -135,12 +144,11 @@ export default function StudioShell({ productId }: { productId: ProductType }) {
   >({});
 
   const hasAnyDesign = layers.length > 0;
-  const activeDesignId = activeDesignIdByArea[areaId] ?? (layers[0]?.id ?? null);
+  const activeDesignId = activeDesignIdByArea[areaId] ?? layers[0]?.id ?? null;
 
   function setActiveDesignId(id: string | null) {
     setActiveDesignIdByArea((prev) => ({ ...prev, [areaId]: id }));
   }
-
 
   const onViewportWheel = useCallback((e: React.WheelEvent) => {
     // stop page from scrolling
@@ -162,8 +170,9 @@ export default function StudioShell({ productId }: { productId: ProductType }) {
   >({});
 
   const transformsForArea = transformByArea[areaId] ?? {};
-  const currentTransform = activeDesignId ? transformsForArea[activeDesignId] ?? null : null;
-
+  const currentTransform = activeDesignId
+    ? transformsForArea[activeDesignId] ?? null
+    : null;
 
   const stageRef = useRef<Konva.Stage | null>(null);
 
@@ -286,7 +295,6 @@ export default function StudioShell({ productId }: { productId: ProductType }) {
     [areaId]
   );
 
-
   function onUpload(file: File) {
     if (
       !file.type.includes("png") &&
@@ -319,7 +327,6 @@ export default function StudioShell({ productId }: { productId: ProductType }) {
     };
     reader.readAsDataURL(file);
   }
-
 
   const STUDIO_H = "h-[calc(100vh-100px)]";
 
@@ -407,14 +414,13 @@ export default function StudioShell({ productId }: { productId: ProductType }) {
     );
   }
 
-
   // When switching to Preview, try to match the preview view with the current area
   useEffect(() => {
     if (tab !== "preview") return;
 
     // If your product.views ids match your area ids (front/back), this keeps it aligned
     const want = areaId;
-    const has = (product.views ?? []).some((v) => v.id === want);
+    const has = (product.views ?? []).some((v: any) => v.id === want);
     if (has) setPreviewViewId(want);
 
     // force Konva re-render so it doesn't stay blank until a transform happens
@@ -426,7 +432,6 @@ export default function StudioShell({ productId }: { productId: ProductType }) {
     if (tab !== "preview") return;
     setPreviewRenderTick((t) => t + 1);
   }, [tab, color, layers, transformsForArea]);
-
 
   const buildMockupPreviewDataUrl = useCallback((pixelRatio: number) => {
     const stage = previewStageRef.current;
@@ -459,7 +464,6 @@ export default function StudioShell({ productId }: { productId: ProductType }) {
     }));
   }
 
-
   const [previewRenderTick, setPreviewRenderTick] = useState(0);
 
   useEffect(() => {
@@ -471,7 +475,6 @@ export default function StudioShell({ productId }: { productId: ProductType }) {
     setExportPreviewSrc(url);
   }, [previewRenderTick, buildMockupPreviewDataUrl, hasAnyDesign]);
 
-
   return (
     <div className={`min-h-[calc(107vh-64px)] ${pageBg}`}>
       <div className="mx-auto max-w-[120rem] px-4 py-6">
@@ -482,15 +485,25 @@ export default function StudioShell({ productId }: { productId: ProductType }) {
           {/* Top bar */}
           <div className="flex items-center justify-between gap-3 px-5 py-2 border-b border-gray-300">
             <div className="flex items-center gap-3">
-              <Link href='/creative' >
+              <Link href="/creative">
                 <button className="h-10 rounded-xl cursor-pointer border ${divider} ${panelBg} ${hoverBg} px-3 text-sm hover:bg-black/[0.03]">
                   <MoveLeft />
                 </button>
               </Link>
 
-              <div className="flex flex-col leading-tight">
-                <div className="text-base font-semibold">My New Product</div>
-                <div className="text-xs text-neutral-500 font-druk">MOVA Studio</div>
+              <div className="flex flex-row items-end gap-2 leading-tight">
+                <img
+                  src="/assets/mova-minilogo.webp"
+                  alt="studio mini logo"
+                  className="w-36 ml-5"
+                />
+                <span
+                  className=" uppercase"
+                  style={{ fontFamily: "Haas Grot Disp" }}
+                >
+                  {" "}
+                  Studio
+                </span>
               </div>
             </div>
 
@@ -506,8 +519,8 @@ export default function StudioShell({ productId }: { productId: ProductType }) {
                     tab === "customize"
                       ? "bg-black text-white"
                       : isDark
-                        ? "text-white/70 hover:bg-white/[0.06]"
-                        : "text-neutral-700 hover:bg-black/[0.04]",
+                      ? "text-white/70 hover:bg-white/[0.06]"
+                      : "text-neutral-700 hover:bg-black/[0.04]",
                   ].join(" ")}
                 >
                   Customize
@@ -521,8 +534,8 @@ export default function StudioShell({ productId }: { productId: ProductType }) {
                     tab === "preview"
                       ? "bg-black text-white"
                       : isDark
-                        ? "text-white/70 hover:bg-white/[0.06]"
-                        : "text-neutral-700 hover:bg-black/[0.04]",
+                      ? "text-white/70 hover:bg-white/[0.06]"
+                      : "text-neutral-700 hover:bg-black/[0.04]",
                   ].join(" ")}
                 >
                   Preview
@@ -614,7 +627,9 @@ export default function StudioShell({ productId }: { productId: ProductType }) {
                           if (!activeDesignId) return;
 
                           setDesignLayersByArea((prev) => {
-                            const next = (prev[areaId] ?? []).filter((l) => l.id !== activeDesignId);
+                            const next = (prev[areaId] ?? []).filter(
+                              (l) => l.id !== activeDesignId
+                            );
                             return { ...prev, [areaId]: next };
                           });
 
@@ -625,11 +640,12 @@ export default function StudioShell({ productId }: { productId: ProductType }) {
                           });
 
                           // pick another active layer if exists
-                          const nextActive = (layers.filter(l => l.id !== activeDesignId)[0]?.id) ?? null;
+                          const nextActive =
+                            layers.filter((l) => l.id !== activeDesignId)[0]
+                              ?.id ?? null;
                           setActiveDesignId(nextActive);
                         }}
                         disabled={!activeDesignId}
-
                         className={`h-10 rounded-xl border px-3 text-sm disabled:opacity-40 bg-red-500/50 hover:bg-red-600/50 cursor-pointer`}
                       >
                         Remove
@@ -735,8 +751,8 @@ export default function StudioShell({ productId }: { productId: ProductType }) {
                                 ? "bg-white border-white/30"
                                 : "bg-white border-black/20"
                               : isDark
-                                ? "bg-black border-white/20"
-                                : "bg-black border-black/20";
+                              ? "bg-black border-white/20"
+                              : "bg-black border-black/20";
 
                           return (
                             <button
@@ -798,8 +814,9 @@ export default function StudioShell({ productId }: { productId: ProductType }) {
             {/* MIDDLE PANEL */}
             {tab === "customize" ? (
               <main
-                className={`relative h-full overflow-hidden ${isDark ? "bg-neutral-950" : "bg-neutral-50"
-                  }`}
+                className={`relative h-full overflow-hidden ${
+                  isDark ? "bg-neutral-950" : "bg-neutral-50"
+                }`}
               >
                 {/* top row */}
                 <div className="mx-auto max-w-3xl pt-5 px-4"></div>
@@ -829,7 +846,9 @@ export default function StudioShell({ productId }: { productId: ProductType }) {
                             <ProductStage
                               product={product}
                               mockupSrc={mockupSrc}
-                              printArea={area?.printArea?.[color] ?? area?.printArea}
+                              printArea={
+                                area?.printArea?.[color] ?? area?.printArea
+                              }
                               designLayers={layers}
                               activeDesignId={activeDesignId}
                               onSelectDesign={setActiveDesignId}
@@ -840,9 +859,10 @@ export default function StudioShell({ productId }: { productId: ProductType }) {
                               snapToCenterSignal={snapSignal}
                               resetSignal={resetSignal}
                               onStageRef={(s) => (stageRef.current = s)}
-                              onDesignTransformChange={handleDesignTransformChange}
+                              onDesignTransformChange={
+                                handleDesignTransformChange
+                              }
                             />
-
                           </div>
                         </div>
                       </div>
@@ -891,7 +911,9 @@ export default function StudioShell({ productId }: { productId: ProductType }) {
                         if (!activeDesignId) return;
 
                         setDesignLayersByArea((prev) => {
-                          const next = (prev[areaId] ?? []).filter((l) => l.id !== activeDesignId);
+                          const next = (prev[areaId] ?? []).filter(
+                            (l) => l.id !== activeDesignId
+                          );
                           return { ...prev, [areaId]: next };
                         });
 
@@ -902,11 +924,12 @@ export default function StudioShell({ productId }: { productId: ProductType }) {
                         });
 
                         // pick another active layer if exists
-                        const nextActive = (layers.filter(l => l.id !== activeDesignId)[0]?.id) ?? null;
+                        const nextActive =
+                          layers.filter((l) => l.id !== activeDesignId)[0]
+                            ?.id ?? null;
                         setActiveDesignId(nextActive);
                       }}
                       disabled={!activeDesignId}
-
                       className={`h-10 rounded-xl border px-3 text-sm disabled:opacity-40 bg-red-700 hover:bg-red-800 text-white border-gray-400 cursor-pointer`}
                     >
                       Remove Design
@@ -923,8 +946,9 @@ export default function StudioShell({ productId }: { productId: ProductType }) {
             ) : (
               <>
                 <main
-                  className={`${isDark ? "bg-neutral-950" : "bg-neutral-50"
-                    } h-full overflow-hidden`}
+                  className={`${
+                    isDark ? "bg-neutral-950" : "bg-neutral-50"
+                  } h-full overflow-hidden`}
                 >
                   <div className="h-full p-6">
                     <div className="h-full rounded-3xl border border-black/10 bg-white overflow-hidden">

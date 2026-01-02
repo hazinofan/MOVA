@@ -41,6 +41,7 @@ export function ShopGrid() {
   const router = useRouter();
 
   const [rawProducts, setRawProducts] = useState<ApiProduct[]>([]);
+  const [tab, setTab] = useState<"all" | "printed">("all");
   const [total, setTotal] = useState(0);
 
   const [loading, setLoading] = useState(true);
@@ -75,7 +76,12 @@ export function ShopGrid() {
   // ✅ Reset page when filters change
   useEffect(() => {
     setPage(1);
-  }, [selectedCategories.join(","), selectedSizes.join(","), selectedColors.join(",")]);
+  }, [
+    tab,
+    selectedCategories.join(","),
+    selectedSizes.join(","),
+    selectedColors.join(","),
+  ]);
 
   // ✅ Fetch products from server based on page + server-side filters
   useEffect(() => {
@@ -87,11 +93,13 @@ export function ShopGrid() {
         setError(null);
 
         // Server-side category filtering (best ROI)
-        const filters = selectedCategories.length
-          ? { categories: selectedCategories }
-          : undefined;
+        const filters = {
+          ...(selectedCategories.length ? { categories: selectedCategories } : {}),
+          ...(tab === "printed" ? { isPrinted: true } : {}), // ✅ add
+        };
 
-        const data = await fetchProducts(page, limit, false, filters);
+        const data = await fetchProducts(page, limit, false, Object.keys(filters).length ? filters : undefined);
+
 
         if (!cancelled) {
           setRawProducts(data?.items || []);
@@ -108,7 +116,8 @@ export function ShopGrid() {
     return () => {
       cancelled = true;
     };
-  }, [page, limit, selectedCategories.join(",")]); // server-side filters only here
+  }, [page, limit, tab, selectedCategories.join(",")]);
+
 
   // Build categories list (NOTE: this is from the current page only.
   // Better: fetch categories from a /categories endpoint.)
@@ -243,6 +252,33 @@ export function ShopGrid() {
             </div>
           </PopoverContent>
         </Popover>
+
+        <div className=" inline-flex rounded-full border border-black/10 bg-white p-1">
+          {[
+            { key: "all", label: "ALL" },
+            { key: "printed", label: "PRINTED BY MOVA" },
+          ].map((t) => {
+            const active = tab === t.key;
+
+            return (
+              <button
+                key={t.key}
+                type="button"
+                onClick={() => setTab(t.key as any)}
+                className={`
+          relative px-6 py-2 text-sm font-druk tracking-[0.14em]
+          rounded-full transition-all duration-200
+          ${active
+                    ? "bg-black text-white"
+                    : "text-black/50 hover:text-black"}
+        `}
+              >
+                {t.label}
+              </button>
+            );
+          })}
+        </div>
+
 
         {/* Clear */}
         {activeFiltersCount > 0 && (

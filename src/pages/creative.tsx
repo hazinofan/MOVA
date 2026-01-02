@@ -12,6 +12,8 @@ import {
     DialogTrigger,
 } from "@/components/ui/dialog";
 import { Printer, Sparkle, Sparkles } from "lucide-react";
+import { useEffect, useState } from "react";
+import { fetchProducts } from "@/core/services/products.service";
 
 type Feature = {
     title: string;
@@ -28,6 +30,53 @@ type Cat = {
     accent: "peach" | "blue" | "black";
     imageSrc: string;
 };
+
+const miniProducts = [
+    {
+        id: "mova-tee-01",
+        title: "MOVA Core Tee",
+        subtitle: "Front print, heavyweight cotton",
+        priceMAD: 249,
+        href: "/shop/mova-core-tee",
+        badge: "NEW",
+        imageSrc: "/mockups/tshirt.webp",
+        colors: ["White", "Black", "Stone"],
+        sizes: ["S", "M", "L", "XL"],
+    },
+    {
+        id: "mova-hoodie-01",
+        title: "MOVA Studio Hoodie",
+        subtitle: "Premium fleece, clean back hit",
+        priceMAD: 399,
+        href: "/shop/mova-studio-hoodie",
+        badge: "BEST",
+        imageSrc: "/mockups/hoodies.webp",
+        colors: ["Black", "Ash", "Cream"],
+        sizes: ["S", "M", "L", "XL"],
+    },
+    {
+        id: "mova-cup-01",
+        title: "MOVA Round Cup",
+        subtitle: "Glossy finish, crisp print",
+        priceMAD: 129,
+        href: "/shop/mova-cup",
+        badge: "DROP",
+        imageSrc: "/mockups/cups.webp",
+        colors: ["White"],
+        sizes: ["One size"],
+    },
+    {
+        id: "mova-tee-02",
+        title: "MOVA Type Tee",
+        subtitle: "Minimal typography, sharp ink",
+        priceMAD: 269,
+        href: "/shop/mova-type-tee",
+        badge: "LIMITED",
+        imageSrc: "/mockups/tshirt.webp",
+        colors: ["White", "Black"],
+        sizes: ["S", "M", "L", "XL"],
+    },
+];
 
 
 export default function CreativePage() {
@@ -143,6 +192,71 @@ export default function CreativePage() {
             imageSrc: "/mockups/tshirt.webp",
         },
     ];
+
+    const [printedProducts, setPrintedProducts] = useState<MiniProduct[]>([]);
+    const [printedLoading, setPrintedLoading] = useState(false);
+
+    // adjust to your backend host
+    const API_ASSETS = process.env.NEXT_PUBLIC_API_URL || "http://localhost:3001";
+
+    useEffect(() => {
+        let cancelled = false;
+
+        async function loadPrinted() {
+            try {
+                setPrintedLoading(true);
+
+                // ✅ fetch printed only (server-side filter)
+                const data = await fetchProducts(1, 4, false, { isPrinted: true });
+
+                const mapped: MiniProduct[] = (data?.items ?? []).map((p: any) => {
+                    const mainImg = p?.images?.[0]?.url;
+
+                    const src = mainImg
+                        ? mainImg.startsWith("http")
+                            ? mainImg
+                            : `${API_ASSETS}${mainImg.startsWith("/") ? "" : "/"}${mainImg}`
+                        : "/assets/image1.png";
+
+                    const colors = Array.isArray(p?.tags)
+                        ? p.tags.filter((t: string) =>
+                            ["black", "white", "beige", "cream", "stone", "grey", "gray"].includes(
+                                String(t).toLowerCase()
+                            )
+                        )
+                        : [];
+
+                    const sizes = Array.isArray(p?.variants)
+                        ? p.variants
+                            .map((v: any) => String(v.size || "").toUpperCase())
+                            .filter(Boolean)
+                        : [];
+
+                    return {
+                        id: String(p.id),
+                        title: p.name ?? "Unnamed",
+                        subtitle: p?.metaTitle ?? "Printed by MOVA",
+                        priceMAD: Number(p.salePrice ?? p.price ?? 0),
+                        href: `/shop/${p.slug}`,
+                        badge: p.isNewArrival ? "NEW" : p.isFeatured ? "BEST" : undefined,
+                        imageSrc: src,
+                        colors,
+                        sizes,
+                    };
+                });
+
+                if (!cancelled) setPrintedProducts(mapped);
+            } finally {
+                if (!cancelled) setPrintedLoading(false);
+            }
+        }
+
+        loadPrinted();
+        return () => {
+            cancelled = true;
+        };
+    }, [API_ASSETS]);
+
 
     return (
         <main className="min-h-screen bg-white text-black">
@@ -511,6 +625,8 @@ export default function CreativePage() {
                             <CategoryTile key={c.key} cat={c} index={idx + 1} />
                         ))}
                     </div>
+
+                    <MiniShop products={printedProducts} loading={printedLoading} />
                 </div>
             </section>
         </main>
@@ -633,3 +749,137 @@ function CategoryTile({ cat, index }: { cat: Cat; index: number }) {
 
 
 CreativePage.hideNavbar = true;
+
+type MiniProduct = {
+    id: string;
+    title: string;
+    subtitle: string;
+    priceMAD: number;
+    href: string;
+    badge?: string;
+    imageSrc: string;
+    colors: string[];
+    sizes: string[];
+};
+
+function moneyMAD(n: number) {
+    return new Intl.NumberFormat("fr-MA", {
+        style: "currency",
+        currency: "MAD",
+        maximumFractionDigits: 0,
+    }).format(n);
+}
+
+function MiniShop({
+    products,
+    loading,
+}: {
+    products: MiniProduct[];
+    loading?: boolean;
+}) {
+    return (
+        <section className="mt-16 overflow-hidden rounded-[36px] border border-black/10 bg-white">
+            {/* header */}
+            <div className="relative border-b border-black/10 px-6 py-10 sm:px-8">
+                <div className="pointer-events-none absolute inset-0 opacity-[0.22] [background-image:linear-gradient(to_right,rgba(0,0,0,0.06)_1px,transparent_1px),linear-gradient(to_bottom,rgba(0,0,0,0.06)_1px,transparent_1px)] [background-size:52px_52px]" />
+                <div className="relative flex flex-col gap-5 lg:flex-row lg:items-end lg:justify-between">
+                    <div>
+                        <div className="text-base font-semibold text-black/55">
+                            Mini shop
+                        </div>
+                        <h3 className="mt-3 font-druk text-4xl tracking-tight sm:text-5xl">
+                            Printed by MOVA. Sold by MOVA.
+                        </h3>
+                        <p className="mt-3 max-w-2xl text-base text-black/65">
+                            Real drops we printed in-house: clean ink, premium blanks, ready to ship.
+                        </p>
+                    </div>
+
+                    <div className="flex flex-col gap-3 sm:flex-row sm:items-center">
+                        <Link
+                            href="/shop"
+                            className="inline-flex items-center justify-center rounded-full border border-black/15 bg-white px-6 py-3 text-base font-semibold hover:bg-black/[0.03]"
+                        >
+                            View all
+                        </Link>
+
+                        <Link href="/studio" className="w-full sm:w-auto">
+                            <Button className="w-full bg-black text-base text-white hover:bg-black/90 rounded-full px-7 py-6">
+                                <Sparkles className="mr-2 h-5 w-5" />
+                                Make yours
+                            </Button>
+                        </Link>
+                    </div>
+                </div>
+            </div>
+
+            {/* grid */}
+            <div className="p-6 sm:p-8">
+                {loading ? (
+                    <div className="py-10 text-center font-druk tracking-[0.12em] text-black/60">
+                        LOADING PRINTED DROPS...
+                    </div>
+                ) : products.length === 0 ? (
+                    <div className="py-10 text-center font-druk tracking-[0.12em] text-black/60">
+                        NO PRINTED PRODUCTS YET
+                    </div>
+                ) : (
+                    <div className="grid gap-6 md:grid-cols-2 xl:grid-cols-4">
+                        {products.map((p) => (
+                            <MiniProductCard key={p.id} p={p} />
+                        ))}
+                    </div>
+                )}
+            </div>
+        </section>
+    );
+}
+
+function MiniProductCard({ p }: { p: MiniProduct }) {
+    return (
+        <Link
+            href={p.href}
+            className="group relative overflow-hidden rounded-3xl border border-black/10 bg-white transition hover:-translate-y-0.5"
+        >
+            {/* image */}
+            <div className="relative h-[360px] w-full bg-black/[0.02]">
+                <Image
+                    src={p.imageSrc}
+                    alt={p.title}
+                    fill
+                    className="object-cover transition-transform duration-500 group-hover:scale-[1.03]"
+                />
+
+                {/* badge (smaller + calmer) */}
+                {p.badge ? (
+                    <div className="absolute left-4 top-4 rounded-full border border-black/10 bg-white/85 px-3 py-1 text-[12px] font-semibold text-black/70 backdrop-blur">
+                        {p.badge}
+                    </div>
+                ) : null}
+            </div>
+
+            {/* info */}
+            <div className="p-6">
+                <div className="flex items-start justify-between gap-4">
+                    <div className="min-w-0">
+                        <div className="truncate text-base font-semibold">{p.title}</div>
+                        <div className="mt-1 truncate text-base text-black/55">
+                            {p.subtitle}
+                        </div>
+                    </div>
+
+                    <div className="shrink-0 text-base font-semibold">
+                        {moneyMAD(p.priceMAD)}
+                    </div>
+                </div>
+
+                {/* tiny meta (one line, no pills) */}
+                <div className="mt-4 text-[12px] font-mono tracking-widest text-black/45">
+                    {p.colors?.length ? `${p.colors.length} COLORS` : null}
+                    {p.colors?.length && p.sizes?.length ? "  •  " : null}
+                    {p.sizes?.length ? `${p.sizes.length} SIZES` : null}
+                </div>
+            </div>
+        </Link>
+    );
+}

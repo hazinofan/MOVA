@@ -11,8 +11,9 @@ export async function fetchProducts(
   limit = 20,
   includeArchived = false,
   filters?: {
-    category?: string;        // single slug
-    categories?: string[];    // multiple slugs
+    category?: string;       
+    categories?: string[];   
+    isPrinted?: boolean;     
   }
 ): Promise<PaginatedProducts> {
   const params = new URLSearchParams();
@@ -29,12 +30,16 @@ export async function fetchProducts(
     params.set("categories", filters.categories.join(","));
   }
 
+  // ✅ printed filter
+  if (typeof filters?.isPrinted === "boolean") {
+    params.set("isPrinted", String(filters.isPrinted));
+  }
+
   const res = await fetch(`${API_URL}/products?${params.toString()}`);
 
   if (!res.ok) throw new Error("Failed to fetch products");
   return res.json();
 }
-
 
 export async function fetchProduct(id: number): Promise<Product> {
   const res = await fetch(`${API_URL}/products/${id}`);

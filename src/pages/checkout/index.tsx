@@ -206,7 +206,7 @@ export default function CheckoutPage() {
 
                                     <button
                                         onClick={() => removeCartItem(p.key)}
-                                        className="text-sm text-red-500 hover:text-red-600"
+                                        className="text-sm cursor-pointer text-red-500 hover:text-red-600"
                                         type="button"
                                     >
                                         ×
@@ -409,7 +409,7 @@ function QtyButton({
         <button
             type="button"
             onClick={onClick}
-            className="grid h-8 w-8 place-items-center rounded-full border border-slate-200 bg-white text-sm text-slate-700 hover:bg-slate-50"
+            className="grid cursor-pointer h-8 w-8 place-items-center rounded-full border border-slate-200 bg-white text-sm text-slate-700 hover:bg-slate-50"
         >
             {children}
         </button>

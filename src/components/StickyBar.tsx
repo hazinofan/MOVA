@@ -186,7 +186,7 @@ export default function StickyAddToCartBar({
 
         <div className="w-full max-w-[420px]">
           <Button
-            className="w-full h-full rounded-none bg-black text-white text-xs md:text-sm font-druk tracking-[0.18em] uppercase"
+            className="w-full cursor-pointer h-full rounded-none bg-black text-white text-xs md:text-sm font-druk tracking-[0.18em] uppercase"
             onClick={handleAddToCart}
             disabled={!resolved.id || loadingProduct}
           >

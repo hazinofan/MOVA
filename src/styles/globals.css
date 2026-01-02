@@ -17,15 +17,15 @@
   font-style: normal;
   font-display: swap;
 }
- 
+
 @theme {
-  --font-sans: "Haas Grot Disp", sans-serif;  
+  --font-sans: "Haas Grot Disp", sans-serif;
 }
 
 :root {
   font-family: var(--font-sans);
 }
- 
+
 @layer utilities {
   .font-druk {
     font-family: "Druk Wide", sans-serif;
@@ -39,7 +39,7 @@
   height: 80px;
   border-top: 4px solid var(--c1);
   border-bottom: 4px solid var(--c1);
-  background: linear-gradient(90deg, var(--c1) 2px, var(--c2) 0 5px,var(--c1) 0) 50%/7px 8px no-repeat;
+  background: linear-gradient(90deg, var(--c1) 2px, var(--c2) 0 5px, var(--c1) 0) 50%/7px 8px no-repeat;
   display: grid;
   overflow: hidden;
   animation: l5-0 2s infinite linear;
@@ -54,7 +54,8 @@
   align-items: center;
   justify-content: center;
 
-  background: #fafafa; /* light background like your app */
+  background: #fafafa;
+  /* light background like your app */
 }
 
 .loader::before,
@@ -72,7 +73,7 @@
     linear-gradient(#000 0 0);
   -webkit-mask-composite: destination-out;
   mask-composite: exclude;
-  background: linear-gradient(var(--d,0deg),var(--c2) 50%,#0000 0) bottom /100% 205%,
+  background: linear-gradient(var(--d, 0deg), var(--c2) 50%, #0000 0) bottom /100% 205%,
     linear-gradient(var(--c2) 0 0) center/0 100%;
   background-repeat: no-repeat;
   animation: inherit;
@@ -97,11 +98,101 @@
 }
 
 @keyframes l5-1 {
-  10%,70% {
-    background-size: 100% 205%,var(--s,0) 100%
+
+  10%,
+  70% {
+    background-size: 100% 205%, var(--s, 0) 100%
   }
 
-  70%,100% {
-    background-position: top,center
+  70%,
+  100% {
+    background-position: top, center
   }
+}
+
+/* ===== MOVA Tour theme (driver.js) ===== */
+.mova-tour.driver-popover {
+  border-radius: 16px !important;
+  border: 1px solid rgba(0, 0, 0, 0.12) !important;
+  box-shadow: 0 18px 50px rgba(0, 0, 0, 0.18) !important;
+  padding: 14px 14px 12px !important;
+  max-width: 360px !important;
+  background: #fff !important;
+}
+
+.mova-tour .driver-popover-title {
+  font-size: 16px !important;
+  font-family: cursive;
+  font-weight: 800 !important;
+  letter-spacing: -0.01em !important;
+  color: #0a0a0a !important;
+  margin-bottom: 6px !important;
+}
+
+.mova-tour .driver-popover-description {
+  font-size: 13px !important;
+  line-height: 1.45 !important;
+  color: rgba(10, 10, 10, 0.72) !important;
+}
+
+.mova-tour .driver-popover-progress-text {
+  font-size: 12px !important;
+  color: rgba(10, 10, 10, 0.55) !important;
+}
+
+/* Close button */
+.mova-tour .driver-popover-close-btn {
+  width: 28px !important;
+  height: 28px !important;
+  border-radius: 10px !important;
+  color: rgba(10, 10, 10, 0.6) !important;
+}
+
+.mova-tour .driver-popover-close-btn:hover {
+  background: rgba(0, 0, 0, 0.06) !important;
+  color: rgba(10, 10, 10, 0.85) !important;
+}
+
+/* Footer layout */
+.mova-tour .driver-popover-footer {
+  margin-top: 10px !important;
+  gap: 10px !important;
+}
+
+/* Buttons */
+.mova-tour .driver-popover-btns {
+  gap: 8px !important;
+}
+
+.mova-tour .driver-popover-prev-btn,
+.mova-tour .driver-popover-next-btn {
+  color: #0a0a0a !important;
+  background: #fff !important;
+  border: 1px solid #0000001f !important;
+  /* border-radius: 12px !important; */
+  padding: 5px 12px !important;
+  font-size: 13px !important;
+  font-family: cursive;
+  font-weight: 800 !important;
+}
+
+/* Next = MOVA accent */
+.mova-tour .driver-popover-next-btn {
+  border: none !important;
+  background: #b254ff !important;
+  /* MOVA green vibe */
+  color: #0a0a0a !important;
+}
+
+.mova-tour .driver-popover-prev-btn:hover {
+  background: rgba(0, 0, 0, 0.06) !important;
+}
+
+.mova-tour .driver-popover-next-btn:hover {
+  filter: brightness(0.97) !important;
+}
+
+/* Arrow color */
+.mova-tour.driver-popover .driver-popover-arrow {
+  border-color: #fff !important;
 }

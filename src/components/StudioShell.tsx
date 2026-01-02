@@ -1,4 +1,6 @@
 "use client";
+import { driver } from "driver.js";
+import "driver.js/dist/driver.css";
 import MockupPreviews, { type MockupView } from "./MockupPreviews";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import type Konva from "konva";
@@ -51,18 +53,18 @@ const UI_PARTS: AreaId[] = ["front", "back"];
 export default function StudioShell({ product }: { product: ProductConfig }) {
   const productId = product.id;
   useEffect(() => {
-  console.log("🧠 StudioShell product", product);
-  console.log("🧱 areas mockup type sample", product.areas?.[0]?.id, typeof (product.areas?.[0] as any)?.mockup);
-  console.log("🖼️ views mockup type sample", product.views?.[0]?.id, typeof (product.views?.[0] as any)?.mockup);
+    console.log("🧠 StudioShell product", product);
+    console.log("🧱 areas mockup type sample", product.areas?.[0]?.id, typeof (product.areas?.[0] as any)?.mockup);
+    console.log("🖼️ views mockup type sample", product.views?.[0]?.id, typeof (product.views?.[0] as any)?.mockup);
 
-  // also check current computed mockupSrc (if area exists)
-  const a0: any = product.areas?.find((a: any) => a.id === "front") ?? product.areas?.[0];
-  try {
-    if (a0?.mockup) console.log("🧪 front mockup('white')", a0.mockup("white"));
-  } catch (e) {
-    console.error("💥 front mockup call failed", e);
-  }
-}, [product]);
+    // also check current computed mockupSrc (if area exists)
+    const a0: any = product.areas?.find((a: any) => a.id === "front") ?? product.areas?.[0];
+    try {
+      if (a0?.mockup) console.log("🧪 front mockup('white')", a0.mockup("white"));
+    } catch (e) {
+      console.error("💥 front mockup call failed", e);
+    }
+  }, [product]);
 
   type StudioTab = "customize" | "preview";
   const [tab, setTab] = useState<StudioTab>("customize");
@@ -272,6 +274,15 @@ export default function StudioShell({ product }: { product: ProductConfig }) {
     if (uiAreas[0]?.id) setAreaId(uiAreas[0].id);
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [productId, uiAreas]);
+
+  // useEffect(() => {
+  //   const seen = localStorage.getItem("mova_studio_tour_done");
+  //   if (!seen) {
+  //     startStudioTour();
+  //     localStorage.setItem("mova_studio_tour_done", "true");
+  //   }
+  // }, []);
+
 
   const mockupSrc = useMemo(() => {
     if (!area) return "";
@@ -509,40 +520,7 @@ export default function StudioShell({ product }: { product: ProductConfig }) {
 
             <div className="flex items-center gap-2">
               {/* Workspace theme toggle */}
-              <div
-                className={`flex items-center gap-1 rounded-xl border border-gray-300 p-1`}
-              >
-                <button
-                  onClick={() => setTab("customize")}
-                  className={[
-                    "h-9 rounded-lg px-3 text-base font-druk transition cursor-pointer",
-                    tab === "customize"
-                      ? "bg-black text-white"
-                      : isDark
-                      ? "text-white/70 hover:bg-white/[0.06]"
-                      : "text-neutral-700 hover:bg-black/[0.04]",
-                  ].join(" ")}
-                >
-                  Customize
-                </button>
-
-                <button
-                  onClick={() => setTab("preview")}
-                  disabled={!hasAnyDesign}
-                  className={[
-                    "h-9 rounded-lg px-3 text-base font-druk transition cursor-pointer disabled:opacity-40",
-                    tab === "preview"
-                      ? "bg-black text-white"
-                      : isDark
-                      ? "text-white/70 hover:bg-white/[0.06]"
-                      : "text-neutral-700 hover:bg-black/[0.04]",
-                  ].join(" ")}
-                >
-                  Preview
-                </button>
-              </div>
-
-              <div className="flex items-center gap-1 rounded-xl border ${divider} ${panelBg} ${hoverBg} p-1">
+              <div className="flex items-center gap-1 rounded-xl border ${divider} ${panelBg} ${hoverBg} p-1" >
                 <button
                   onClick={() => setWorkspaceTheme("light")}
                   className={[
@@ -566,10 +544,53 @@ export default function StudioShell({ product }: { product: ProductConfig }) {
                   Dark
                 </button>
               </div>
+              <div className="flex flex-row gap-5 items-center" id="checkout-actions">
+                <div
+                  className={`flex items-center gap-1 rounded-xl border border-gray-300 p-1`}
+                >
+                  <button
+                    onClick={() => setTab("customize")}
+                    className={[
+                      "h-9 rounded-lg px-3 text-base font-druk transition cursor-pointer",
+                      tab === "customize"
+                        ? "bg-black text-white"
+                        : isDark
+                          ? "text-white/70 hover:bg-white/[0.06]"
+                          : "text-neutral-700 hover:bg-black/[0.04]",
+                    ].join(" ")}
+                  >
+                    Customize
+                  </button>
 
-              <button className="h-10 rounded-xl bg-black px-4 text-sm font-semibold text-white disabled:opacity-40">
-                Checkout
-              </button>
+                  <button
+                    onClick={() => setTab("preview")}
+                    disabled={!hasAnyDesign}
+                    className={[
+                      "h-9 rounded-lg px-3 text-base font-druk transition cursor-pointer disabled:opacity-40",
+                      tab === "preview"
+                        ? "bg-black text-white"
+                        : isDark
+                          ? "text-white/70 hover:bg-white/[0.06]"
+                          : "text-neutral-700 hover:bg-black/[0.04]",
+                    ].join(" ")}
+                  >
+                    Preview
+                  </button>
+                </div>
+
+                <button disabled={!hasAnyDesign} className="h-10 rounded-xl bg-black px-4 text-sm font-semibold text-white disabled:opacity-40">
+                  Checkout
+                </button>
+                {/* <button
+                onClick={() => {
+                  localStorage.removeItem("mova_studio_tour_done");
+                  startStudioTour();
+                }}
+                className="text-sm text-neutral-600 hover:text-black"
+              >
+                Start studio tour
+              </button> */}
+              </div>
             </div>
           </div>
 
@@ -600,6 +621,7 @@ export default function StudioShell({ product }: { product: ProductConfig }) {
 
                     <label
                       className={`mt-3 grid h-11 cursor-pointer place-items-center rounded-xl border text-sm font-semibold ${sidebar.btnIdle}`}
+                      id="upload-design"
                     >
                       Upload from device
                       <input
@@ -660,7 +682,7 @@ export default function StudioShell({ product }: { product: ProductConfig }) {
                   <div className={`border-t ${sidebar.line}`} />
 
                   {/* Scroll content */}
-                  <div className="flex-1 overflow-y-auto p-4 space-y-6">
+                  <div className="flex-1 overflow-y-auto p-4 space-y-6" >
                     {/* Products */}
                     <div className="space-y-3">
                       <div
@@ -669,7 +691,7 @@ export default function StudioShell({ product }: { product: ProductConfig }) {
                         Product
                       </div>
 
-                      <div className="space-y-3">
+                      <div className="space-y-3" >
                         <div
                           className={`rounded-2xl border px-3 py-3 ${sidebar.btnIdle}`}
                         >
@@ -707,7 +729,7 @@ export default function StudioShell({ product }: { product: ProductConfig }) {
                     </div>
 
                     {/* Parts */}
-                    <div className="space-y-3">
+                    <div className="space-y-3" id="product-selector">
                       <div
                         className={`text-sm font-druk ${sidebar.sectionTitle}`}
                       >
@@ -733,7 +755,7 @@ export default function StudioShell({ product }: { product: ProductConfig }) {
                     </div>
 
                     {/* Color */}
-                    <div className="space-y-3">
+                    <div className="space-y-3" id="color-selector">
                       <div
                         className={`text-sm font-druk ${sidebar.sectionTitle}`}
                       >
@@ -751,8 +773,8 @@ export default function StudioShell({ product }: { product: ProductConfig }) {
                                 ? "bg-white border-white/30"
                                 : "bg-white border-black/20"
                               : isDark
-                              ? "bg-black border-white/20"
-                              : "bg-black border-black/20";
+                                ? "bg-black border-white/20"
+                                : "bg-black border-black/20";
 
                           return (
                             <button
@@ -774,7 +796,7 @@ export default function StudioShell({ product }: { product: ProductConfig }) {
                     </div>
 
                     {/* Tools */}
-                    <div className="space-y-3">
+                    <div className="space-y-3" id="studio-tools">
                       <div
                         className={`text-sm font-druk ${sidebar.sectionTitle}`}
                       >
@@ -814,9 +836,9 @@ export default function StudioShell({ product }: { product: ProductConfig }) {
             {/* MIDDLE PANEL */}
             {tab === "customize" ? (
               <main
-                className={`relative h-full overflow-hidden ${
-                  isDark ? "bg-neutral-950" : "bg-neutral-50"
-                }`}
+                className={`relative h-full overflow-hidden ${isDark ? "bg-neutral-950" : "bg-neutral-50"
+                  }`}
+                id="studio-canvas"
               >
                 {/* top row */}
                 <div className="mx-auto max-w-3xl pt-5 px-4"></div>
@@ -946,9 +968,8 @@ export default function StudioShell({ product }: { product: ProductConfig }) {
             ) : (
               <>
                 <main
-                  className={`${
-                    isDark ? "bg-neutral-950" : "bg-neutral-50"
-                  } h-full overflow-hidden`}
+                  className={`${isDark ? "bg-neutral-950" : "bg-neutral-50"
+                    } h-full overflow-hidden`}
                 >
                   <div className="h-full p-6">
                     <div className="h-full rounded-3xl border border-black/10 bg-white overflow-hidden">
@@ -1105,4 +1126,59 @@ function PreviewRightSidebar({
       </div>
     </div>
   );
+}
+
+export function startStudioTour() {
+  const tour = driver({
+    showProgress: true,
+    allowClose: true,
+    overlayOpacity: 0.6,
+    popoverClass: "mova-tour",
+    steps: [
+      {
+        element: "#studio-canvas",
+        popover: {
+          title: "Welcome to MOVA Studio",
+          description: "This is your live preview canvas.",
+        },
+      },
+      {
+        element: "#upload-design",
+        popover: {
+          title: "Upload your design",
+          description: "Use PNG with transparent background for best results.",
+        },
+      },
+      {
+        element: "#product-selector",
+        popover: {
+          title: "Product & side",
+          description: "Switch between front and back printing areas.",
+        },
+      },
+      {
+        element: "#color-selector",
+        popover: {
+          title: "Garment color",
+          description: "Choose the fabric color for your product.",
+        },
+      },
+      {
+        element: "#studio-tools",
+        popover: {
+          title: "Placement tools",
+          description: "Center or hide print guides for accuracy.",
+        },
+      },
+      {
+        element: "#checkout-actions",
+        popover: {
+          title: "Preview & checkout",
+          description: "Review your design before ordering.",
+        },
+      },
+    ],
+  });
+
+  tour.drive();
 }

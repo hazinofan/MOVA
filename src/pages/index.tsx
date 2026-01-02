@@ -4,6 +4,7 @@ import { Categories } from "@/components/Categories";
 import { WhyMovaSection } from "@/components/faq";
 import HeroSection from "@/components/heroSection";
 import Navbar from "@/components/layouts/navbar";
+import { MovaStudioPrintSection } from "@/components/movaStudioAd";
 import NewsletterSection from "@/components/NewsLetter";
 import { PartsBanner } from "@/components/PartsBanner";
 import { MixAndMatchSection } from "@/components/QuickAdd";
@@ -83,7 +84,8 @@ export default function Home() {
         sectionLines={["LOUNGE MEETS","STREET ENERGY"]}
         sectionBody="Cloud-soft fabrics, clean lines, and fits designed for all-day wear."
       />
-      <MixAndMatchSection />
+      {/* <MixAndMatchSection /> */}
+      <MovaStudioPrintSection />
       <AsSeenOnCarousel />
       <PartsBanner />
       <WhyMovaSection />
